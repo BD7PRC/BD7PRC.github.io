@@ -1,45 +1,53 @@
-name: 自动更新QSL卡呼号列表
+name: GitHub Pages Deploy
+
+# 只在 main 分支 push 触发
 on:
   push:
+    branches:
+      - main
+    # 只在网站相关文件变化时触发
     paths:
-      - "qsl-images/**"
-      - ".github/workflows/update-qsl-list.yml"
-  workflow_dispatch:
+      - '_posts/**'
+      - '_layouts/**'
+      - '_includes/**'
+      - 'assets/**'
+      - '*.html'
+      - '*.md'
+
+# 避免队列堆积：同一分支只允许一个运行实例
+concurrency:
+  group: github-pages-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  update:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # 检出仓库代码
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: 生成并注入呼号列表
-        run: |
-          python3 - <<'PY'
-          import os, json, io
-          imgs = []
-          if os.path.isdir("qsl-images"):
-              for f in sorted(os.listdir("qsl-images")):
-                  p = os.path.join("qsl-images", f)
-                  if os.path.isfile(p):
-                      n, e = os.path.splitext(f)
-                      if e.lower() in [".jpg",".jpeg",".png",".gif",".webp"]:
-                          imgs.append(n)
-          data = json.dumps(imgs, ensure_ascii=False)
-          path = "index.html"
-          txt = io.open(path,"r",encoding="utf8").read()
-          out = txt.replace("/* AUTO_GENERATED_CALLSIGNS */", data, 1)
-          io.open(path,"w",encoding="utf8").write(out)
-          print("写入:", data)
-          PY
+      # 安装依赖（如果你是 Jekyll，可按需修改）
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
 
-      - name: 提交并推送
+      - name: Install dependencies
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add index.html
-          if git diff --staged --quiet; then
-            echo "No changes"
-          else
-            git commit -m "自动更新 QSL 呼号列表"
-            git push
-          fi
+          gem install bundler
+          bundle install
+
+      # 构建网站
+      - name: Build site
+        run: |
+          bundle exec jekyll build
+
+      # 部署到 GitHub Pages
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_site
+          # 可选：如果你想保持 commit 历史
+          keep_files: true
