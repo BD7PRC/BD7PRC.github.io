@@ -1,69 +1,147 @@
----
-# 这是 Jekyll 的 Front Matter（必须保留，不能删）
-layout: default
----
-
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QSL卡收藏展示</title>
-  <!-- 引入 Tailwind CSS（样式库，无需本地安装） -->
+  <title>QSL卡自动展示（10分钟更新）</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
-  <!-- 简单样式优化 -->
-  <style>
-    .card-hover { transition: all 0.3s ease; }
-    .card-hover:hover { transform: translateY(-5px); box-shadow: 0 8px 16px rgba(0,0,0,0.15); }
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: { primary: '#1e40af' }
+        }
+      }
+    }
+  </script>
+  <style type="text/tailwindcss">
+    @layer utilities {
+      .card-hover { @apply transition-all duration-300 hover:shadow-lg hover:-translate-y-1; }
+    }
   </style>
 </head>
-<body class="bg-gray-100 min-h-screen">
-  <!-- 顶部导航栏 -->
-  <header class="bg-blue-800 text-white py-4 shadow-md">
+<body class="bg-gray-100">
+  <header class="bg-primary text-white py-4">
     <div class="container mx-auto px-4 text-center">
-      <h1 class="text-2xl font-bold flex items-center justify-center">
-        <i class="fa fa-radio mr-2"></i>QSL卡收藏
-      </h1>
-      <p class="text-blue-100 text-sm mt-1">业余无线电通联纪念卡片</p>
+      <h1 class="text-2xl font-bold"><i class="fa fa-radio mr-2"></i>QSL卡自动展示</h1>
+      <p class="text-sm mt-1">每10分钟自动更新</p>
     </div>
   </header>
 
-  <!-- 主要内容区（QSL卡网格） -->
   <main class="container mx-auto px-4 py-8">
-    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
-      <!-- Jekyll 循环：自动读取 qsl.yaml 中的呼号，生成卡片 -->
-      {% for qsl in site.data.qsl %}
-        <div class="bg-white rounded-lg overflow-hidden shadow-sm card-hover">
-          <!-- 图片路径：qsl/呼号.jpg，和上传的图片对应 -->
-          <div class="aspect-square bg-gray-100 flex items-center justify-center">
-            <img src="qsl/{{ qsl.callsign }}.jpg" 
-                 alt="{{ qsl.callsign }} 的 QSL 卡"
-                 class="w-full h-full object-contain p-4"
-                 <!-- 图片缺失时显示占位图 -->
-                 onerror="this.src='https://picsum.photos/seed/{{ qsl.callsign }}/300/300'; this.alt='图片缺失'">
-          </div>
-          <!-- 呼号文字 -->
-          <div class="p-3 text-center">
-            <h3 class="font-bold text-gray-800">{{ qsl.callsign }}</h3>
-          </div>
-        </div>
-      {% empty %}
-        <!-- 没有数据时显示的提示 -->
-        <div class="col-span-full text-center py-16 text-gray-500">
-          <i class="fa fa-inbox text-5xl mb-4 opacity-30"></i>
-          <p>暂无 QSL 卡，请上传图片并在 _data/qsl.yaml 添加呼号</p>
-        </div>
-      {% endfor %}
+    <div id="last-update" class="text-right text-sm text-gray-500 mb-4">
+      最后更新：加载中...
+    </div>
+    
+    <div id="qsl-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+      <!-- 卡片将自动生成 -->
+      <div class="col-span-full text-center py-16 text-gray-500">
+        <i class="fa fa-circle-o-notch fa-spin text-5xl text-primary mb-4"></i>
+        <p>加载QSL卡列表中...</p>
+      </div>
     </div>
   </main>
 
-  <!-- 页脚 -->
-  <footer class="bg-gray-800 text-white py-6 mt-12">
-    <div class="container mx-auto px-4 text-center text-sm">
-      <p>QSL 卡展示网站 &copy; 2024</p>
-      <p class="mt-1 text-gray-400">基于 Jekyll + GitHub Pages 构建</p>
-    </div>
-  </footer>
+  <script>
+    // #################### 请修改这里的配置 ####################
+    const config = {
+      githubUser: "BD7PRC",  // 例如："zhangsan123"
+      githubRepo: "BD7PRC.github.io",        // 例如："qsl-gallery"
+      qslDir: "qsl",                   // 图片存放文件夹（保持不变）
+      cacheExpireMinutes: 10           // 缓存时间（10分钟，无需改）
+    };
+    // ########################################################
+
+    // 从缓存或API加载数据
+    function loadQslCards() {
+      const cacheKey = 'qslCache';
+      const cachedData = localStorage.getItem(cacheKey);
+      const now = new Date().getTime();
+
+      // 检查缓存是否有效（10分钟内）
+      if (cachedData) {
+        const { data, timestamp } = JSON.parse(cachedData);
+        const expireTime = timestamp + (config.cacheExpireMinutes * 60 * 1000);
+        
+        if (now < expireTime) {
+          renderCards(data); // 使用缓存数据
+          document.getElementById('last-update').textContent = 
+            `最后更新：${new Date(timestamp).toLocaleString()}`;
+          return;
+        }
+      }
+
+      // 缓存过期，调用GitHub API获取最新图片列表
+      fetch(`https://api.github.com/repos/${config.githubUser}/${config.githubRepo}/contents/${config.qslDir}`)
+        .then(response => {
+          if (!response.ok) throw new Error(`加载失败: ${response.status}`);
+          return response.json();
+        })
+        .then(files => {
+          // 筛选图片文件（排除文件夹，只保留.jpg/.png）
+          const validFiles = files
+            .filter(file => file.type === 'file' && 
+              (file.name.toLowerCase().endsWith('.jpg') || 
+               file.name.toLowerCase().endsWith('.png')))
+            .map(file => ({
+              callsign: file.name.replace(/\.(jpg|png)$/i, ''), // 提取呼号
+              url: file.download_url // 图片直接下载链接
+            }))
+            .sort((a, b) => a.callsign.localeCompare(b.callsign)); // 按呼号排序
+
+          // 保存到本地缓存（10分钟内不再调用API）
+          localStorage.setItem(cacheKey, JSON.stringify({
+            data: validFiles,
+            timestamp: now
+          }));
+
+          // 渲染卡片
+          renderCards(validFiles);
+          document.getElementById('last-update').textContent = 
+            `最后更新：${new Date(now).toLocaleString()}`;
+        })
+        .catch(error => {
+          console.error('错误:', error);
+          document.getElementById('qsl-container').innerHTML = `
+            <div class="col-span-full text-center py-16 text-red-500">
+              <i class="fa fa-exclamation-triangle text-5xl mb-4"></i>
+              <p>加载失败，请稍后重试</p>
+            </div>
+          `;
+        });
+    }
+
+    // 渲染QSL卡卡片
+    function renderCards(cards) {
+      const container = document.getElementById('qsl-container');
+      
+      if (cards.length === 0) {
+        container.innerHTML = `
+          <div class="col-span-full text-center py-16 text-gray-500">
+            <i class="fa fa-inbox text-5xl mb-4"></i>
+            <p>暂无QSL卡，请上传图片到qsl文件夹</p>
+          </div>
+        `;
+        return;
+      }
+
+      // 生成卡片HTML
+      container.innerHTML = cards.map(card => `
+        <div class="bg-white rounded-lg shadow p-2 card-hover">
+          <img src="${card.url}" alt="${card.callsign}" 
+               class="w-full aspect-square object-contain"
+               onerror="this.src='https://picsum.photos/seed/${card.callsign}/300/300'">
+          <div class="text-center p-2">
+            <h3 class="font-bold">${card.callsign}</h3>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // 页面加载时执行，之后每10分钟自动刷新一次
+    window.addEventListener('DOMContentLoaded', loadQslCards);
+    setInterval(loadQslCards, config.cacheExpireMinutes * 60 * 1000);
+  </script>
 </body>
 </html>
