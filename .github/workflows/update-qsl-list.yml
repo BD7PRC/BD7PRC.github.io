@@ -2,63 +2,43 @@ name: 自动更新QSL卡呼号列表
 on:
   push:
     paths:
-      - 'qsl-images/**'
-      - '.github/workflows/update-qsl-list.yml'
+      - "qsl-images/**"
+      - ".github/workflows/update-qsl-list.yml"
   workflow_dispatch:
 
 jobs:
-  update-callsigns:
+  update:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v4
 
-      - name: Generate callsigns JSON and inject into index.html
-        shell: bash
+      - name: 生成并注入呼号列表
         run: |
-          set -euo pipefail
-
-          # 确保 index.html 存在
-          if [ ! -f index.html ]; then
-            echo "index.html not found. Aborting."
-            exit 1
-          fi
-
-          # 用单个 Python here-doc 做所有事情，避免 shell 级别的转义问题
           python3 - <<'PY'
-import os, json, re, io
+          import os, json, io
+          imgs = []
+          if os.path.isdir("qsl-images"):
+              for f in sorted(os.listdir("qsl-images")):
+                  p = os.path.join("qsl-images", f)
+                  if os.path.isfile(p):
+                      n, e = os.path.splitext(f)
+                      if e.lower() in [".jpg",".jpeg",".png",".gif",".webp"]:
+                          imgs.append(n)
+          data = json.dumps(imgs, ensure_ascii=False)
+          path = "index.html"
+          txt = io.open(path,"r",encoding="utf8").read()
+          out = txt.replace("/* AUTO_GENERATED_CALLSIGNS */", data, 1)
+          io.open(path,"w",encoding="utf8").write(out)
+          print("写入:", data)
+          PY
 
-imgs_dir = "qsl-images"
-calls = []
-if os.path.isdir(imgs_dir):
-    for f in sorted(os.listdir(imgs_dir)):
-        full = os.path.join(imgs_dir, f)
-        if os.path.isfile(full):
-            name, ext = os.path.splitext(f)
-            if ext.lower() in ('.jpg', '.jpeg', '.png', '.gif', '.webp'):
-                calls.append(name)
-
-p = "index.html"
-s = io.open(p, "r", encoding="utf8").read()
-placeholder = "/* AUTO_GENERATED_CALLSIGNS */"
-replacement = json.dumps(calls, ensure_ascii=False)
-if placeholder not in s:
-    print("Placeholder not found in index.html; aborting.")
-    raise SystemExit(1)
-new = s.replace(placeholder, replacement, 1)
-io.open(p, "w", encoding="utf8").write(new)
-print("WROTE", replacement)
-PY
-
-      - name: Commit & push if changed
+      - name: 提交并推送
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add index.html
           if git diff --staged --quiet; then
-            echo "No changes to commit"
+            echo "No changes"
           else
             git commit -m "自动更新 QSL 呼号列表"
             git push
