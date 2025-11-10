@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QSL卡自动展示（10分钟更新）</title>
+  <title>QSL卡自动展示</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
   <script>
@@ -18,6 +18,7 @@
   <style type="text/tailwindcss">
     @layer utilities {
       .card-hover { @apply transition-all duration-300 hover:shadow-lg hover:-translate-y-1; }
+      .filter-active { @apply bg-primary text-white; }
     }
   </style>
 </head>
@@ -34,24 +35,73 @@
       最后更新：加载中...
     </div>
     
-    <div id="qsl-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+    <!-- 搜索区域 -->
+    <div class="mb-6">
+      <div class="flex flex-col md:flex-row gap-4 items-center justify-center">
+        <div class="relative w-full md:w-1/2">
+          <input 
+            type="text" 
+            id="callsign-search" 
+            placeholder="输入呼号搜索..." 
+            class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+          <button 
+            id="search-btn" 
+            class="absolute right-2 top-1/2 transform -translate-y-1/2 bg-primary text-white px-3 py-1 rounded"
+          >
+            <i class="fa fa-search"></i>
+          </button>
+        </div>
+        
+        <!-- 每页显示数量选择 -->
+        <div class="flex items-center gap-2 w-full md:w-auto justify-center">
+          <label for="per-page" class="text-gray-700">每页显示：</label>
+          <select id="per-page" class="border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary">
+            <option value="10">10</option>
+            <option value="20" selected>20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+      </div>
+      
+      <!-- 首字母筛选 -->
+      <div class="mt-4 flex flex-wrap justify-center gap-1" id="letter-filters">
+        <button class="px-3 py-1 rounded border filter-active" data-letter="all">全部</button>
+        <!-- 字母按钮将动态生成 -->
+      </div>
+    </div>
+    
+    <!-- QSL卡展示区域 -->
+    <div id="qsl-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
       <!-- 卡片将自动生成 -->
       <div class="col-span-full text-center py-16 text-gray-500">
         <i class="fa fa-circle-o-notch fa-spin text-5xl text-primary mb-4"></i>
         <p>加载QSL卡列表中...</p>
       </div>
     </div>
+    
+    <!-- 分页控件 -->
+    <div id="pagination" class="mt-8 flex flex-wrap justify-center gap-2">
+      <!-- 分页按钮将动态生成 -->
+    </div>
   </main>
 
   <script>
-    // #################### 请修改这里的配置 ####################
+    // 配置
     const config = {
-      githubUser: "BD7PRC",  // 例如："zhangsan123"
-      githubRepo: "BD7PRC.github.io",        // 例如："qsl-gallery"
-      qslDir: "qsl",                   // 图片存放文件夹（保持不变）
-      cacheExpireMinutes: 10           // 缓存时间（10分钟，无需改）
+      githubUser: "BD7PRC",  // GitHub用户名
+      githubRepo: "BD7PRC.github.io",        // GitHub仓库名
+      qslDir: "",                   // QSL卡存放文件夹（根目录）
+      cacheExpireMinutes: 10,           // 缓存时间（10分钟）
+      currentPage: 1,                   // 当前页码
+      itemsPerPage: 20,                 // 每页显示数量
+      currentFilter: 'all',             // 当前首字母筛选
+      searchQuery: ''                   // 当前搜索关键词
     };
-    // ########################################################
+
+    // 存储所有QSL卡数据
+    let allQslCards = [];
 
     // 从缓存或API加载数据
     function loadQslCards() {
@@ -65,7 +115,7 @@
         const expireTime = timestamp + (config.cacheExpireMinutes * 60 * 1000);
         
         if (now < expireTime) {
-          renderCards(data); // 使用缓存数据
+          processQslData(data); // 使用缓存数据
           document.getElementById('last-update').textContent = 
             `最后更新：${new Date(timestamp).toLocaleString()}`;
           return;
@@ -86,18 +136,19 @@
                file.name.toLowerCase().endsWith('.png')))
             .map(file => ({
               callsign: file.name.replace(/\.(jpg|png)$/i, ''), // 提取呼号
-              url: file.download_url // 图片直接下载链接
+              url: file.download_url, // 图片直接下载链接
+              firstLetter: file.name.replace(/\.(jpg|png)$/i, '').charAt(0).toUpperCase() // 首字母
             }))
             .sort((a, b) => a.callsign.localeCompare(b.callsign)); // 按呼号排序
 
-          // 保存到本地缓存（10分钟内不再调用API）
+          // 保存到本地缓存
           localStorage.setItem(cacheKey, JSON.stringify({
             data: validFiles,
             timestamp: now
           }));
 
-          // 渲染卡片
-          renderCards(validFiles);
+          // 处理并渲染数据
+          processQslData(validFiles);
           document.getElementById('last-update').textContent = 
             `最后更新：${new Date(now).toLocaleString()}`;
         })
@@ -112,15 +163,79 @@
         });
     }
 
+    // 处理QSL数据并更新界面
+    function processQslData(data) {
+      allQslCards = data;
+      renderLetterFilters();
+      renderFilteredCards();
+    }
+
+    // 生成首字母筛选按钮
+    function renderLetterFilters() {
+      const filterContainer = document.getElementById('letter-filters');
+      
+      // 获取所有唯一的首字母并排序
+      const letters = [...new Set(allQslCards.map(card => card.firstLetter))].sort();
+      
+      // 清除现有字母按钮（保留"全部"按钮）
+      const allButton = filterContainer.querySelector('[data-letter="all"]');
+      filterContainer.innerHTML = '';
+      filterContainer.appendChild(allButton);
+      
+      // 添加字母按钮
+      letters.forEach(letter => {
+        const button = document.createElement('button');
+        button.className = `px-3 py-1 rounded border ${config.currentFilter === letter ? 'filter-active' : ''}`;
+        button.dataset.letter = letter;
+        button.textContent = letter;
+        button.addEventListener('click', () => {
+          config.currentFilter = letter;
+          config.currentPage = 1; // 重置到第一页
+          renderLetterFilters();
+          renderFilteredCards();
+        });
+        filterContainer.appendChild(button);
+      });
+    }
+
+    // 筛选卡片并渲染
+    function renderFilteredCards() {
+      // 应用首字母筛选
+      let filteredCards = allQslCards;
+      if (config.currentFilter !== 'all') {
+        filteredCards = filteredCards.filter(card => card.firstLetter === config.currentFilter);
+      }
+      
+      // 应用搜索筛选
+      if (config.searchQuery) {
+        const query = config.searchQuery.toLowerCase();
+        filteredCards = filteredCards.filter(card => 
+          card.callsign.toLowerCase().includes(query)
+        );
+      }
+      
+      // 应用分页
+      const totalPages = Math.ceil(filteredCards.length / config.itemsPerPage);
+      const startIndex = (config.currentPage - 1) * config.itemsPerPage;
+      const paginatedCards = filteredCards.slice(startIndex, startIndex + config.itemsPerPage);
+      
+      // 渲染卡片
+      renderCards(paginatedCards, filteredCards.length);
+      
+      // 渲染分页控件
+      renderPagination(totalPages);
+    }
+
     // 渲染QSL卡卡片
-    function renderCards(cards) {
+    function renderCards(cards, totalCount) {
       const container = document.getElementById('qsl-container');
       
       if (cards.length === 0) {
         container.innerHTML = `
           <div class="col-span-full text-center py-16 text-gray-500">
             <i class="fa fa-inbox text-5xl mb-4"></i>
-            <p>暂无QSL卡，请上传图片到qsl文件夹</p>
+            <p>未找到匹配的QSL卡</p>
+            ${totalCount === 0 ? '<p class="mt-2">请上传图片到根目录</p>' : ''}
           </div>
         `;
         return;
@@ -139,9 +254,109 @@
       `).join('');
     }
 
+    // 渲染分页控件
+    function renderPagination(totalPages) {
+      const paginationContainer = document.getElementById('pagination');
+      paginationContainer.innerHTML = '';
+      
+      // 如果只有一页，不显示分页
+      if (totalPages <= 1) return;
+      
+      // 上一页按钮
+      const prevButton = document.createElement('button');
+      prevButton.className = `px-3 py-1 rounded border ${config.currentPage === 1 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100'}`;
+      prevButton.innerHTML = '<i class="fa fa-chevron-left"></i> 上一页';
+      prevButton.disabled = config.currentPage === 1;
+      prevButton.addEventListener('click', () => {
+        if (config.currentPage > 1) {
+          config.currentPage--;
+          renderFilteredCards();
+        }
+      });
+      paginationContainer.appendChild(prevButton);
+      
+      // 页码按钮（只显示当前页附近的页码）
+      const showPages = 5; // 最多显示5个页码
+      let startPage = Math.max(1, config.currentPage - Math.floor(showPages / 2));
+      let endPage = startPage + showPages - 1;
+      
+      if (endPage > totalPages) {
+        endPage = totalPages;
+        startPage = Math.max(1, endPage - showPages + 1);
+      }
+      
+      // 添加省略号（如果需要）
+      if (startPage > 1) {
+        const ellipsis = document.createElement('span');
+        ellipsis.className = 'px-2 py-1';
+        ellipsis.textContent = '...';
+        paginationContainer.appendChild(ellipsis);
+      }
+      
+      // 添加页码按钮
+      for (let i = startPage; i <= endPage; i++) {
+        const pageButton = document.createElement('button');
+        pageButton.className = `px-3 py-1 rounded border ${i === config.currentPage ? 'bg-primary text-white' : 'hover:bg-gray-100'}`;
+        pageButton.textContent = i;
+        pageButton.addEventListener('click', () => {
+          config.currentPage = i;
+          renderFilteredCards();
+        });
+        paginationContainer.appendChild(pageButton);
+      }
+      
+      // 添加省略号（如果需要）
+      if (endPage < totalPages) {
+        const ellipsis = document.createElement('span');
+        ellipsis.className = 'px-2 py-1';
+        ellipsis.textContent = '...';
+        paginationContainer.appendChild(ellipsis);
+      }
+      
+      // 下一页按钮
+      const nextButton = document.createElement('button');
+      nextButton.className = `px-3 py-1 rounded border ${config.currentPage === totalPages ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100'}`;
+      nextButton.innerHTML = '下一页 <i class="fa fa-chevron-right"></i>';
+      nextButton.disabled = config.currentPage === totalPages;
+      nextButton.addEventListener('click', () => {
+        if (config.currentPage < totalPages) {
+          config.currentPage++;
+          renderFilteredCards();
+        }
+      });
+      paginationContainer.appendChild(nextButton);
+    }
+
+    // 初始化事件监听
+    function initEventListeners() {
+      // 搜索按钮点击事件
+      document.getElementById('search-btn').addEventListener('click', () => {
+        config.searchQuery = document.getElementById('callsign-search').value.trim();
+        config.currentPage = 1; // 重置到第一页
+        renderFilteredCards();
+      });
+      
+      // 搜索框回车事件
+      document.getElementById('callsign-search').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          document.getElementById('search-btn').click();
+        }
+      });
+      
+      // 每页显示数量变化事件
+      document.getElementById('per-page').addEventListener('change', (e) => {
+        config.itemsPerPage = parseInt(e.target.value);
+        config.currentPage = 1; // 重置到第一页
+        renderFilteredCards();
+      });
+    }
+
     // 页面加载时执行，之后每10分钟自动刷新一次
-    window.addEventListener('DOMContentLoaded', loadQslCards);
-    setInterval(loadQslCards, config.cacheExpireMinutes * 60 * 1000);
+    window.addEventListener('DOMContentLoaded', () => {
+      initEventListeners();
+      loadQslCards();
+      setInterval(loadQslCards, config.cacheExpireMinutes * 60 * 1000);
+    });
   </script>
 </body>
 </html>
