@@ -1,0 +1,49 @@
+name: 自动生成QSL卡列表
+
+on:
+  push:
+    paths:
+      - 'qsl/**'  # 监控qsl文件夹变化
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  generate-list:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: 生成QSL列表
+        run: |
+          node -e "
+            const fs = require('fs');
+            const path = require('path');
+            const qslDir = path.join(__dirname, 'qsl');
+            
+            if (!fs.existsSync(qslDir)) {
+              fs.mkdirSync(qslDir, { recursive: true });
+              console.log('创建qsl文件夹');
+            }
+            
+            const files = fs.readdirSync(qslDir)
+              .filter(file => file.toLowerCase().endsWith('.jpg'))
+              .map(file => `qsl/${file}`)
+              .sort((a, b) => a.localeCompare(b));
+            
+            fs.writeFileSync(
+              'qsl-list.json',
+              JSON.stringify(files, null, 2)
+            );
+            console.log(\`已生成\${files.length}张QSL卡列表\`);
+          "
+
+      - name: 提交更新
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "自动更新QSL卡列表"
+          file_pattern: "qsl-list.json"
+          commit_user_name: "QSL Bot"
+          commit_user_email: "qsl-bot@example.com"
