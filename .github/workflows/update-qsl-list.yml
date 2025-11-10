@@ -16,24 +16,40 @@ jobs:
           fetch-depth: 0
 
       - name: Generate callsigns JSON and replace placeholder
+        shell: bash
         run: |
-          python3 - <<'PY'
-import os, json, io, re
+          set -euo pipefail
+          # 如果没有 qsl-images 文件夹也不要报错
+          if [ ! -d "qsl-images" ]; then
+            echo "qsl-images folder not found; writing empty list"
+            python3 - <<'PYTHON'
+import re, json
+p = "index.html"
+s = open(p, "r", encoding="utf8").read()
+new = re.sub(r'/\* AUTO_GENERATED_CALLSIGNS \*/', json.dumps([], ensure_ascii=False), s, count=1)
+open(p, "w", encoding="utf8").write(new)
+print("WROTE []")
+PYTHON
+            exit 0
+          fi
+
+          # 使用 Python 扫描图片并替换 index.html 中的占位符
+          python3 - <<'PYTHON'
+import os, json, re
 imgs_dir = "qsl-images"
 calls = []
-if os.path.exists(imgs_dir):
-    for f in sorted(os.listdir(imgs_dir)):
-        if os.path.isfile(os.path.join(imgs_dir, f)):
-            name, ext = os.path.splitext(f)
-            if ext.lower() in ['.jpg', '.jpeg', '.png', '.gif', '.webp']:
-                calls.append(name)
-# read index.html
-p="index.html"
+for f in sorted(os.listdir(imgs_dir)):
+    path = os.path.join(imgs_dir, f)
+    if os.path.isfile(path):
+        name, ext = os.path.splitext(f)
+        if ext.lower() in ['.jpg', '.jpeg', '.png', '.gif', '.webp']:
+            calls.append(name)
+p = "index.html"
 s = open(p, "r", encoding="utf8").read()
-new = re.sub(r'/\* AUTO_GENERATED_CALLSIGNS \*/', json.dumps(calls, ensure_ascii=False), s, count=1)
+new = re.sub(r'/\\* AUTO_GENERATED_CALLSIGNS \\*/', json.dumps(calls, ensure_ascii=False), s, count=1)
 open(p, "w", encoding="utf8").write(new)
 print("WROTE", json.dumps(calls, ensure_ascii=False))
-PY
+PYTHON
 
       - name: Commit & push
         run: |
@@ -41,7 +57,7 @@ PY
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add index.html
           if git diff --staged --quiet; then
-            echo "No changes"
+            echo "No changes to commit"
           else
             git commit -m "自动更新 QSL 呼号列表"
             git push
