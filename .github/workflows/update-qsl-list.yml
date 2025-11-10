@@ -20,57 +20,36 @@ jobs:
         run: |
           set -euo pipefail
 
-          # 如果没有 index.html，失败并打印友好信息
+          # 确保 index.html 存在
           if [ ! -f index.html ]; then
-            echo "index.html not found, aborting"
+            echo "index.html not found. Aborting."
             exit 1
           fi
 
-          # 收集 qsl-images 下图片的基本文件名（去掉扩展名），按名称排序
-          calls=()
-          if [ -d "qsl-images" ]; then
-            for f in qsl-images/*; do
-              [ -f "$f" ] || continue
-              # 获取扩展名小写
-              ext="${f##*.}"
-              ext="${ext,,}"
-              case "$ext" in
-                jpg|jpeg|png|gif|webp)
-                  name="$(basename "$f")"
-                  # 去掉最后一个点及其后的扩展名
-                  name="${name%.*}"
-                  calls+=("$name")
-                  ;;
-                *)
-                  ;;
-              esac
-            done
-          fi
+          # 用单个 Python here-doc 做所有事情，避免 shell 级别的转义问题
+          python3 - <<'PY'
+import os, json, re, io
 
-          # 使用 python3 将数组转为 JSON 字符串（正确处理 Unicode）
-          if [ ${#calls[@]} -eq 0 ]; then
-            json='[]'
-          else
-            # 将数组一行一项传给 python 生成合法 JSON
-            json=$(printf '%s\n' "${calls[@]}" | python3 - <<PY
-import sys, json
-items = [line.rstrip("\n") for line in sys.stdin if line.strip()!='']
-print(json.dumps(items, ensure_ascii=False))
-PY
-)
-          fi
+imgs_dir = "qsl-images"
+calls = []
+if os.path.isdir(imgs_dir):
+    for f in sorted(os.listdir(imgs_dir)):
+        full = os.path.join(imgs_dir, f)
+        if os.path.isfile(full):
+            name, ext = os.path.splitext(f)
+            if ext.lower() in ('.jpg', '.jpeg', '.png', '.gif', '.webp'):
+                calls.append(name)
 
-          echo "Calls JSON: $json"
-
-          # 使用 python 做文本替换（避免 sed 转义的问题）
-          python3 - <<PY
-import io
 p = "index.html"
 s = io.open(p, "r", encoding="utf8").read()
-old = "/* AUTO_GENERATED_CALLSIGNS */"
-new = s.replace(old, """%s""" % ("$json"))
+placeholder = "/* AUTO_GENERATED_CALLSIGNS */"
+replacement = json.dumps(calls, ensure_ascii=False)
+if placeholder not in s:
+    print("Placeholder not found in index.html; aborting.")
+    raise SystemExit(1)
+new = s.replace(placeholder, replacement, 1)
 io.open(p, "w", encoding="utf8").write(new)
-print("Injected callsigns into index.html")
+print("WROTE", replacement)
 PY
 
       - name: Commit & push if changed
