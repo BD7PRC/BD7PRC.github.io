@@ -1,0 +1,7 @@
+# 每行一个呼号，格式：- callsign: 你的呼号
+- callsign: BA1AA
+- callsign: VR2WAA
+- callsign: BD7PRC
+- callsign: JA1ABC
+# 后续新增QSL卡，直接在这里加一行，比如：
+# - callsign: 新呼号（如：UA9XYZ）
