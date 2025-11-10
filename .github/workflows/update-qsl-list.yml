@@ -1,0 +1,48 @@
+name: 自动更新QSL卡呼号列表
+on:
+  push:
+    paths:
+      - 'qsl-images/**'
+      - '.github/workflows/update-qsl-list.yml'
+  workflow_dispatch:
+
+jobs:
+  update-callsigns:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate callsigns JSON and replace placeholder
+        run: |
+          python3 - <<'PY'
+import os, json, io, re
+imgs_dir = "qsl-images"
+calls = []
+if os.path.exists(imgs_dir):
+    for f in sorted(os.listdir(imgs_dir)):
+        if os.path.isfile(os.path.join(imgs_dir, f)):
+            name, ext = os.path.splitext(f)
+            if ext.lower() in ['.jpg', '.jpeg', '.png', '.gif', '.webp']:
+                calls.append(name)
+# read index.html
+p="index.html"
+s = open(p, "r", encoding="utf8").read()
+new = re.sub(r'/\* AUTO_GENERATED_CALLSIGNS \*/', json.dumps(calls, ensure_ascii=False), s, count=1)
+open(p, "w", encoding="utf8").write(new)
+print("WROTE", json.dumps(calls, ensure_ascii=False))
+PY
+
+      - name: Commit & push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          if git diff --staged --quiet; then
+            echo "No changes"
+          else
+            git commit -m "自动更新 QSL 呼号列表"
+            git push
+          fi
