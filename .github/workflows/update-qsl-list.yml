@@ -15,43 +15,65 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Generate callsigns JSON and replace placeholder
+      - name: Generate callsigns JSON and inject into index.html
         shell: bash
         run: |
           set -euo pipefail
-          # 如果没有 qsl-images 文件夹也不要报错
-          if [ ! -d "qsl-images" ]; then
-            echo "qsl-images folder not found; writing empty list"
-            python3 - <<'PYTHON'
-import re, json
-p = "index.html"
-s = open(p, "r", encoding="utf8").read()
-new = re.sub(r'/\* AUTO_GENERATED_CALLSIGNS \*/', json.dumps([], ensure_ascii=False), s, count=1)
-open(p, "w", encoding="utf8").write(new)
-print("WROTE []")
-PYTHON
-            exit 0
+
+          # 如果没有 index.html，失败并打印友好信息
+          if [ ! -f index.html ]; then
+            echo "index.html not found, aborting"
+            exit 1
           fi
 
-          # 使用 Python 扫描图片并替换 index.html 中的占位符
-          python3 - <<'PYTHON'
-import os, json, re
-imgs_dir = "qsl-images"
-calls = []
-for f in sorted(os.listdir(imgs_dir)):
-    path = os.path.join(imgs_dir, f)
-    if os.path.isfile(path):
-        name, ext = os.path.splitext(f)
-        if ext.lower() in ['.jpg', '.jpeg', '.png', '.gif', '.webp']:
-            calls.append(name)
-p = "index.html"
-s = open(p, "r", encoding="utf8").read()
-new = re.sub(r'/\\* AUTO_GENERATED_CALLSIGNS \\*/', json.dumps(calls, ensure_ascii=False), s, count=1)
-open(p, "w", encoding="utf8").write(new)
-print("WROTE", json.dumps(calls, ensure_ascii=False))
-PYTHON
+          # 收集 qsl-images 下图片的基本文件名（去掉扩展名），按名称排序
+          calls=()
+          if [ -d "qsl-images" ]; then
+            for f in qsl-images/*; do
+              [ -f "$f" ] || continue
+              # 获取扩展名小写
+              ext="${f##*.}"
+              ext="${ext,,}"
+              case "$ext" in
+                jpg|jpeg|png|gif|webp)
+                  name="$(basename "$f")"
+                  # 去掉最后一个点及其后的扩展名
+                  name="${name%.*}"
+                  calls+=("$name")
+                  ;;
+                *)
+                  ;;
+              esac
+            done
+          fi
 
-      - name: Commit & push
+          # 使用 python3 将数组转为 JSON 字符串（正确处理 Unicode）
+          if [ ${#calls[@]} -eq 0 ]; then
+            json='[]'
+          else
+            # 将数组一行一项传给 python 生成合法 JSON
+            json=$(printf '%s\n' "${calls[@]}" | python3 - <<PY
+import sys, json
+items = [line.rstrip("\n") for line in sys.stdin if line.strip()!='']
+print(json.dumps(items, ensure_ascii=False))
+PY
+)
+          fi
+
+          echo "Calls JSON: $json"
+
+          # 使用 python 做文本替换（避免 sed 转义的问题）
+          python3 - <<PY
+import io
+p = "index.html"
+s = io.open(p, "r", encoding="utf8").read()
+old = "/* AUTO_GENERATED_CALLSIGNS */"
+new = s.replace(old, """%s""" % ("$json"))
+io.open(p, "w", encoding="utf8").write(new)
+print("Injected callsigns into index.html")
+PY
+
+      - name: Commit & push if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
