@@ -16,28 +16,50 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: 生成QSL列表
+      - name: 确保qsl文件夹存在
+        run: |
+          # 手动创建qsl文件夹（防止文件夹不存在导致的错误）
+          if [ ! -d "qsl" ]; then
+            mkdir -p qsl
+            echo "创建qsl文件夹"
+          fi
+
+      - name: 生成QSL列表（带错误处理）
         run: |
           node -e "
-            const fs = require('fs');
-            const path = require('path');
-            const qslDir = path.join(__dirname, 'qsl');
-            
-            if (!fs.existsSync(qslDir)) {
-              fs.mkdirSync(qslDir, { recursive: true });
-              console.log('创建qsl文件夹');
+            try {
+              const fs = require('fs').promises;
+              const path = require('path');
+              
+              async function generateList() {
+                const qslDir = path.join(__dirname, 'qsl');
+                
+                // 读取文件夹内容
+                const files = await fs.readdir(qslDir);
+                
+                // 筛选JPG文件并排序
+                const qslFiles = files
+                  .filter(file => file.toLowerCase().endsWith('.jpg'))
+                  .map(file => `qsl/${file}`)
+                  .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+                
+                // 写入JSON文件
+                await fs.writeFile(
+                  'qsl-list.json',
+                  JSON.stringify(qslFiles, null, 2)
+                );
+                
+                console.log(\`成功生成 \${qslFiles.length} 张QSL卡列表\`);
+              }
+              
+              generateList().catch(err => {
+                console.error('生成列表失败:', err);
+                process.exit(1); // 明确返回错误码
+              });
+            } catch (err) {
+              console.error('脚本执行错误:', err);
+              process.exit(1);
             }
-            
-            const files = fs.readdirSync(qslDir)
-              .filter(file => file.toLowerCase().endsWith('.jpg'))
-              .map(file => `qsl/${file}`)
-              .sort((a, b) => a.localeCompare(b));
-            
-            fs.writeFileSync(
-              'qsl-list.json',
-              JSON.stringify(files, null, 2)
-            );
-            console.log(\`已生成\${files.length}张QSL卡列表\`);
           "
 
       - name: 提交更新
