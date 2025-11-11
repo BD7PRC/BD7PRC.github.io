@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QSL卡自动展示（10分钟更新）</title>
+  <title>BD7RC的QSL卡展示</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
   <script>
@@ -19,14 +19,34 @@
     @layer utilities {
       .card-hover { @apply transition-all duration-300 hover:shadow-lg hover:-translate-y-1; }
       .filter-active { @apply bg-primary text-white; }
+      .image-container {
+        @apply relative overflow-hidden bg-gray-100 rounded cursor-pointer;
+        padding-top: 100%; /* 1:1 Aspect Ratio */
+      }
+      .image-container img {
+        @apply absolute top-0 left-0 w-full h-full object-cover transition-transform duration-300;
+      }
+      .image-container:hover img {
+        @apply scale-105;
+      }
+      .error-overlay {
+        @apply absolute inset-0 bg-gray-200 flex flex-col items-center justify-center text-gray-500;
+      }
+      .modal-image-container {
+        @apply relative max-w-full max-h-[80vh] transition-transform duration-300;
+      }
+      /* 确保按钮始终在最上层 */
+      .modal-controls {
+        @apply absolute top-0 right-0 flex gap-2 bg-black/50 p-2 rounded-lg z-10;
+      }
     }
   </style>
 </head>
 <body class="bg-gray-100">
   <header class="bg-primary text-white py-4">
     <div class="container mx-auto px-4 text-center">
-      <h1 class="text-2xl font-bold"><i class="fa fa-radio mr-2"></i>QSL卡自动展示</h1>
-      <p class="text-sm mt-1">每5分钟自动更新</p>
+      <h1 class="text-2xl font-bold"><i class="fa fa-radio mr-2"></i>BD7RC的QSL卡展示</h1>
+      <p class="text-sm mt-1">BD7PRC's QSL card display</p>
     </div>
   </header>
 
@@ -44,7 +64,7 @@
           id="search-btn" 
           class="bg-primary text-white px-4 py-2 rounded-r-lg hover:bg-primary/90 transition-colors"
         >
-          <i class="fa fa-search"></i> 搜索
+          <i class="fa fa-search"></i> 搜索Search
         </button>
       </div>
     </div>
@@ -55,8 +75,8 @@
         <!-- 首字母筛选 -->
         <div class="flex flex-wrap gap-2">
           <span class="text-sm text-gray-600 self-center">首字母筛选:</span>
-          <button class="filter-btn px-3 py-1 rounded border border-gray-300 text-sm hover:bg-gray-100 transition-colors filter-active" data-letter="all">全部</button>
-          <!-- 字母按钮将动态生成 -->
+          <button class="filter-btn px-3 py-1 rounded border border-gray-300 text-sm hover:bg-gray-100 transition-colors filter-active" data-letter="all" disabled>全部</button>
+          <!-- A-Z字母按钮会动态生成 -->
         </div>
 
         <!-- 分页控制 -->
@@ -90,7 +110,7 @@
     </div>
     
     <!-- QSL卡展示区 -->
-    <div id="qsl-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+    <div id="qsl-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
       <!-- 卡片将自动生成 -->
       <div class="col-span-full text-center py-16 text-gray-500">
         <i class="fa fa-circle-o-notch fa-spin text-5xl text-primary mb-4"></i>
@@ -98,12 +118,61 @@
       </div>
     </div>
 
-    <!-- 无结果提示（默认隐藏） -->
+    <!-- 无结果提示 -->
     <div id="no-results" class="hidden col-span-full text-center py-16 text-gray-500">
       <i class="fa fa-search text-5xl mb-4"></i>
       <p>未找到匹配的QSL卡</p>
     </div>
+
+    <!-- 搜索结果弹窗 -->
+    <div id="search-modal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-4">
+      <div class="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-auto">
+        <div class="p-4 border-b flex justify-between items-center">
+          <h3 class="text-xl font-bold" id="modal-title">搜索结果</h3>
+          <button id="close-search-modal" class="text-gray-500 hover:text-gray-700">
+            <i class="fa fa-times text-xl"></i>
+          </button>
+        </div>
+        <div class="p-4" id="modal-content">
+          <!-- 搜索结果将在这里显示 -->
+        </div>
+      </div>
+    </div>
+
+    <!-- 大图查看弹窗（带旋转按钮） -->
+    <div id="image-modal" class="fixed inset-0 bg-black/80 z-50 hidden items-center justify-center p-4">
+      <div class="relative max-w-5xl w-full max-h-[90vh] flex items-center justify-center">
+        <!-- 旋转按钮和关闭按钮 - 确保在最上层 -->
+        <div class="modal-controls">
+          <button id="rotate-image" class="text-white hover:text-gray-300 p-2">
+            <i class="fa fa-rotate-right text-xl"></i>
+          </button>
+          <button id="close-image-modal" class="text-white hover:text-gray-300 p-2">
+            <i class="fa fa-times text-xl"></i>
+          </button>
+        </div>
+        
+        <!-- 图片容器 -->
+        <div class="modal-image-container">
+          <img id="modal-image" src="" alt="QSL卡大图" class="max-w-full max-h-[80vh] object-contain">
+          <div id="modal-error" class="hidden absolute inset-0 bg-gray-200 flex flex-col items-center justify-center text-gray-500">
+            <i class="fa fa-exclamation-circle text-5xl mb-4"></i>
+            <p class="text-xl">图片加载失败 (404)</p>
+          </div>
+        </div>
+        
+        <div class="absolute bottom-0 left-0 right-0 text-center text-white p-4">
+          <h3 id="modal-image-title" class="text-xl font-bold"></h3>
+        </div>
+      </div>
+    </div>
   </main>
+  <!-- 在main标签结束后添加 -->
+<footer class="bg-primary text-white py-4 mt-8">
+  <div class="container mx-auto px-4 text-center">
+    <p>&copy; 2025 VR2WAA. 保留所有权利。All rights reserved.</p>
+  </div>
+</footer>
 
   <script>
     // 配置
@@ -111,18 +180,25 @@
       githubUser: "BD7PRC",
       githubRepo: "BD7PRC.github.io",
       qslDir: "qsl",
-      cacheExpireMinutes: 1
+      cacheExpireMinutes: 10
     };
 
+    // 所有可能的首字母 (A-Z)
+    const allLetters = Array.from({length: 26}, (_, i) => String.fromCharCode(65 + i));
+
     // 状态管理
-    let allQslCards = []; // 所有QSL卡数据
-    let filteredCards = []; // 筛选后的QSL卡
+    let allQslCards = [];
+    let filteredCards = [];
     let currentPage = 1;
     let itemsPerPage = 20;
     let currentLetterFilter = 'all';
+    let currentRotation = 0; // 图片旋转角度
 
     // 初始化页面
     window.addEventListener('DOMContentLoaded', () => {
+      // 生成所有首字母筛选按钮
+      generateAllLetterFilters();
+      
       loadQslCards();
       setInterval(loadQslCards, config.cacheExpireMinutes * 60 * 1000);
       
@@ -134,33 +210,123 @@
       document.getElementById('per-page').addEventListener('change', handlePerPageChange);
       document.getElementById('prev-page').addEventListener('click', goToPrevPage);
       document.getElementById('next-page').addEventListener('click', goToNextPage);
+      document.getElementById('close-search-modal').addEventListener('click', () => {
+        document.getElementById('search-modal').classList.add('hidden');
+        document.getElementById('search-modal').classList.remove('flex');
+      });
+      document.getElementById('close-image-modal').addEventListener('click', closeImageModal);
+      
+      // 旋转按钮事件监听（关键修复：确保按钮能被正确找到并绑定事件）
+      document.getElementById('rotate-image').addEventListener('click', rotateCurrentImage);
+      
+      // 点击弹窗背景关闭大图查看
+      document.getElementById('image-modal').addEventListener('click', (e) => {
+        if (e.target === document.getElementById('image-modal')) {
+          closeImageModal();
+        }
+      });
+
+      // 大图弹窗图片加载失败处理
+      document.getElementById('modal-image').addEventListener('error', () => {
+        document.getElementById('modal-image').classList.add('hidden');
+        document.getElementById('modal-error').classList.remove('hidden');
+      });
     });
+
+    // 关闭图片弹窗并重置旋转状态
+    function closeImageModal() {
+      document.getElementById('image-modal').classList.add('hidden');
+      document.getElementById('image-modal').classList.remove('flex');
+      document.body.style.overflow = '';
+      currentRotation = 0; // 重置旋转角度
+      document.querySelector('.modal-image-container').style.transform = 'rotate(0deg)';
+    }
+
+    // 旋转当前图片功能
+    function rotateCurrentImage() {
+      // 每次旋转90度，循环0-270度
+      currentRotation = (currentRotation + 90) % 360;
+      // 应用旋转样式，带动画效果
+      document.querySelector('.modal-image-container').style.transform = `rotate(${currentRotation}deg)`;
+    }
 
     // 搜索处理
     function handleSearch() {
       const searchTerm = document.getElementById('callsign-search').value.trim().toLowerCase();
       if (!searchTerm) return;
       
-      // 查找匹配的呼号并跳转
-      const matchedCard = allQslCards.find(card => 
-        card.callsign.toLowerCase() === searchTerm
+      const matchedCards = allQslCards.filter(card => 
+        card.callsign.toLowerCase().includes(searchTerm)
       );
       
-      if (matchedCard) {
-        window.location.href = `https://${config.githubUser}.github.io/${config.qslDir}/${matchedCard.callsign}.jpg`;
+      const modal = document.getElementById('search-modal');
+      const modalTitle = document.getElementById('modal-title');
+      const modalContent = document.getElementById('modal-content');
+      
+      if (matchedCards.length > 0) {
+        modalTitle.textContent = `找到 ${matchedCards.length} 个匹配结果: ${searchTerm}`;
+        
+        modalContent.innerHTML = `
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            ${matchedCards.map(card => `
+              <div class="border rounded-lg overflow-hidden">
+                <div class="image-container" onclick="showImageModal('${card.url}', '${card.callsign}')">
+                  <img src="${card.url}" alt="${card.callsign}" 
+                       onerror="this.parentElement.innerHTML = '<div class=\'error-overlay\'><i class=\'fa fa-exclamation-circle text-3xl mb-2\'></i><p>图片加载失败</p></div>'">
+                </div>
+                <div class="p-2 text-center">
+                  <h4 class="font-bold">${card.callsign}</h4>
+                  <button onclick="showImageModal('${card.url}', '${card.callsign}')" class="text-primary hover:underline text-sm mt-1 inline-block">
+                    查看大图 <i class="fa fa-search-plus"></i>
+                  </button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+        
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
       } else {
-        alert(`未找到呼号为 ${searchTerm} 的QSL卡`);
+        alert(`未找到包含 "${searchTerm}" 的QSL卡`);
       }
     }
 
-    // 每页显示数量变更
+    // 显示大图弹窗
+    function showImageModal(imageUrl, callsign) {
+      const modal = document.getElementById('image-modal');
+      const modalImage = document.getElementById('modal-image');
+      const modalError = document.getElementById('modal-error');
+      const modalTitle = document.getElementById('modal-image-title');
+      
+      // 重置旋转状态
+      currentRotation = 0;
+      document.querySelector('.modal-image-container').style.transform = 'rotate(0deg)';
+      
+      modalImage.src = "";
+      modalImage.classList.remove('hidden');
+      modalError.classList.add('hidden');
+      
+      modalImage.src = imageUrl;
+      modalTitle.textContent = callsign;
+      
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      document.body.style.overflow = 'hidden';
+      
+      // 确保按钮在图片加载后仍然可见
+      setTimeout(() => {
+        document.querySelector('.modal-controls').style.zIndex = '100';
+      }, 100);
+    }
+
+    // 其他函数保持不变...
     function handlePerPageChange(e) {
       itemsPerPage = parseInt(e.target.value);
-      currentPage = 1; // 重置到第一页
+      currentPage = 1;
       applyFiltersAndRender();
     }
 
-    // 上一页
     function goToPrevPage() {
       if (currentPage > 1) {
         currentPage--;
@@ -168,7 +334,6 @@
       }
     }
 
-    // 下一页
     function goToNextPage() {
       const totalPages = Math.ceil(filteredCards.length / itemsPerPage);
       if (currentPage < totalPages) {
@@ -177,12 +342,10 @@
       }
     }
 
-    // 字母筛选
     function handleLetterFilter(letter) {
       currentLetterFilter = letter;
-      currentPage = 1; // 重置到第一页
+      currentPage = 1;
       
-      // 更新筛选按钮样式
       document.querySelectorAll('.filter-btn').forEach(btn => {
         if (btn.dataset.letter === letter) {
           btn.classList.add('filter-active');
@@ -194,9 +357,7 @@
       applyFiltersAndRender();
     }
 
-    // 应用筛选并渲染
     function applyFiltersAndRender() {
-      // 应用首字母筛选
       if (currentLetterFilter === 'all') {
         filteredCards = [...allQslCards];
       } else {
@@ -205,21 +366,18 @@
         );
       }
       
-      // 计算分页
       const totalPages = Math.ceil(filteredCards.length / itemsPerPage);
       const startIndex = (currentPage - 1) * itemsPerPage;
       const endIndex = startIndex + itemsPerPage;
       const currentPageItems = filteredCards.slice(startIndex, endIndex);
       
-      // 更新分页信息和按钮状态
       document.getElementById('page-info').textContent = `第 ${currentPage} / ${totalPages || 1} 页`;
       document.getElementById('prev-page').disabled = currentPage <= 1;
       document.getElementById('next-page').disabled = currentPage >= totalPages || totalPages === 0;
       
-      // 渲染当前页内容
       renderCards(currentPageItems);
+      updateLetterButtonStates();
       
-      // 显示/隐藏无结果提示
       const noResultsEl = document.getElementById('no-results');
       const containerEl = document.getElementById('qsl-container');
       if (filteredCards.length === 0) {
@@ -231,13 +389,11 @@
       }
     }
 
-    // 从缓存或API加载数据
     function loadQslCards() {
       const cacheKey = 'qslCache';
       const cachedData = localStorage.getItem(cacheKey);
       const now = new Date().getTime();
 
-      // 检查缓存是否有效
       if (cachedData) {
         const { data, timestamp } = JSON.parse(cachedData);
         const expireTime = timestamp + (config.cacheExpireMinutes * 60 * 1000);
@@ -250,14 +406,12 @@
         }
       }
 
-      // 缓存过期，调用GitHub API获取最新图片列表
       fetch(`https://api.github.com/repos/${config.githubUser}/${config.githubRepo}/contents/${config.qslDir}`)
         .then(response => {
           if (!response.ok) throw new Error(`加载失败: ${response.status}`);
           return response.json();
         })
         .then(files => {
-          // 筛选图片文件并处理
           const validFiles = files
             .filter(file => file.type === 'file' && 
               (file.name.toLowerCase().endsWith('.jpg') || 
@@ -268,7 +422,6 @@
             }))
             .sort((a, b) => a.callsign.localeCompare(b.callsign));
 
-          // 保存到本地缓存
           localStorage.setItem(cacheKey, JSON.stringify({
             data: validFiles,
             timestamp: now
@@ -289,43 +442,44 @@
         });
     }
 
-    // 处理加载的数据
     function processLoadedData(data) {
       allQslCards = data;
-      
-      // 生成首字母筛选按钮
-      generateLetterFilters();
-      
-      // 应用筛选并渲染
       applyFiltersAndRender();
     }
 
-    // 生成首字母筛选按钮
-    function generateLetterFilters() {
+    function generateAllLetterFilters() {
       const filterContainer = document.querySelector('.flex.flex-wrap.gap-2');
       
-      // 清除现有字母按钮（保留"全部"按钮）
-      document.querySelectorAll('.filter-btn[data-letter]:not([data-letter="all"])').forEach(btn => {
-        btn.remove();
-      });
-      
-      // 提取所有首字母并去重
-      const firstLetters = [...new Set(
-        allQslCards.map(card => card.callsign.charAt(0).toUpperCase())
-      )].sort();
-      
-      // 创建字母筛选按钮
-      firstLetters.forEach(letter => {
+      allLetters.forEach(letter => {
         const btn = document.createElement('button');
-        btn.className = 'filter-btn px-3 py-1 rounded border border-gray-300 text-sm hover:bg-gray-100 transition-colors';
+        btn.className = 'filter-btn px-3 py-1 rounded border border-gray-300 text-sm hover:bg-gray-100 transition-colors opacity-50';
         btn.dataset.letter = letter;
         btn.textContent = letter;
+        btn.disabled = true;
         btn.addEventListener('click', () => handleLetterFilter(letter));
         filterContainer.appendChild(btn);
       });
     }
 
-    // 渲染QSL卡卡片
+    function updateLetterButtonStates() {
+      const existingLetters = new Set(
+        allQslCards.map(card => card.callsign.charAt(0).toUpperCase())
+      );
+      
+      document.querySelectorAll('.filter-btn[data-letter]').forEach(btn => {
+        const letter = btn.dataset.letter;
+        if (letter === 'all') return;
+        
+        if (existingLetters.has(letter)) {
+          btn.disabled = false;
+          btn.classList.remove('opacity-50');
+        } else {
+          btn.disabled = true;
+          btn.classList.add('opacity-50');
+        }
+      });
+    }
+
     function renderCards(cards) {
       const container = document.getElementById('qsl-container');
       
@@ -339,14 +493,17 @@
         return;
       }
 
-      // 生成卡片HTML
       container.innerHTML = cards.map(card => `
-        <div class="bg-white rounded-lg shadow p-2 card-hover">
-          <img src="${card.url}" alt="${card.callsign}" 
-               class="w-full aspect-square object-contain"
-               onerror="this.src='https://picsum.photos/seed/${card.callsign}/300/300'">
+        <div class="bg-white rounded-lg shadow p-2 card-hover flex flex-col h-full">
+          <div class="image-container mb-2 flex-grow" onclick="showImageModal('${card.url}', '${card.callsign}')">
+            <img src="${card.url}" alt="${card.callsign}" 
+                 onerror="this.parentElement.innerHTML = '<div class=\'error-overlay\'><i class=\'fa fa-exclamation-circle text-3xl mb-2\'></i><p>图片加载失败</p></div>'">
+          </div>
           <div class="text-center p-2">
-            <h3 class="font-bold">${card.callsign}</h3>
+            <h3 class="font-bold truncate">${card.callsign}</h3>
+            <button onclick="showImageModal('${card.url}', '${card.callsign}')" class="text-xs text-primary hover:underline mt-1 inline-block">
+              查看大图 <i class="fa fa-search-plus"></i>
+            </button>
           </div>
         </div>
       `).join('');
