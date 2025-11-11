@@ -18,6 +18,7 @@
   <style type="text/tailwindcss">
     @layer utilities {
       .card-hover { @apply transition-all duration-300 hover:shadow-lg hover:-translate-y-1; }
+      .filter-active { @apply bg-primary text-white; }
     }
   </style>
 </head>
@@ -30,28 +31,205 @@
   </header>
 
   <main class="container mx-auto px-4 py-8">
+    <!-- 搜索区域 -->
+    <div class="max-w-2xl mx-auto mb-8">
+      <div class="flex">
+        <input 
+          type="text" 
+          id="callsign-search" 
+          placeholder="输入呼号搜索..." 
+          class="flex-1 px-4 py-2 rounded-l-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary"
+        >
+        <button 
+          id="search-btn" 
+          class="bg-primary text-white px-4 py-2 rounded-r-lg hover:bg-primary/90 transition-colors"
+        >
+          <i class="fa fa-search"></i> 搜索
+        </button>
+      </div>
+    </div>
+
+    <!-- 筛选和分页控制区 -->
+    <div class="mb-6">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <!-- 首字母筛选 -->
+        <div class="flex flex-wrap gap-2">
+          <span class="text-sm text-gray-600 self-center">首字母筛选:</span>
+          <button class="filter-btn px-3 py-1 rounded border border-gray-300 text-sm hover:bg-gray-100 transition-colors filter-active" data-letter="all">全部</button>
+          <!-- 字母按钮将动态生成 -->
+        </div>
+
+        <!-- 分页控制 -->
+        <div class="flex items-center gap-4">
+          <div class="flex items-center gap-2">
+            <span class="text-sm text-gray-600">每页显示:</span>
+            <select id="per-page" class="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+              <option value="10">10</option>
+              <option value="20" selected>20</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button id="prev-page" class="px-3 py-1 rounded border border-gray-300 text-sm hover:bg-gray-100 transition-colors" disabled>
+              <i class="fa fa-chevron-left"></i> 上一页
+            </button>
+            <span id="page-info" class="text-sm text-gray-600">第 1 页</span>
+            <button id="next-page" class="px-3 py-1 rounded border border-gray-300 text-sm hover:bg-gray-100 transition-colors" disabled>
+              下一页 <i class="fa fa-chevron-right"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 最后更新时间 -->
     <div id="last-update" class="text-right text-sm text-gray-500 mb-4">
       最后更新：加载中...
     </div>
     
-    <div id="qsl-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+    <!-- QSL卡展示区 -->
+    <div id="qsl-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
       <!-- 卡片将自动生成 -->
       <div class="col-span-full text-center py-16 text-gray-500">
         <i class="fa fa-circle-o-notch fa-spin text-5xl text-primary mb-4"></i>
         <p>加载QSL卡列表中...</p>
       </div>
     </div>
+
+    <!-- 无结果提示（默认隐藏） -->
+    <div id="no-results" class="hidden col-span-full text-center py-16 text-gray-500">
+      <i class="fa fa-search text-5xl mb-4"></i>
+      <p>未找到匹配的QSL卡</p>
+    </div>
   </main>
 
   <script>
-    // #################### 请修改这里的配置 ####################
+    // 配置
     const config = {
-      githubUser: "BD7PRC",  // 例如："zhangsan123"
-      githubRepo: "BD7PRC.github.io",        // 例如："qsl-gallery"
-      qslDir: "qsl",                   // 图片存放文件夹（保持不变）
-      cacheExpireMinutes: 10           // 缓存时间（10分钟，无需改）
+      githubUser: "BD7PRC",
+      githubRepo: "BD7PRC.github.io",
+      qslDir: "qsl",
+      cacheExpireMinutes: 10
     };
-    // ########################################################
+
+    // 状态管理
+    let allQslCards = []; // 所有QSL卡数据
+    let filteredCards = []; // 筛选后的QSL卡
+    let currentPage = 1;
+    let itemsPerPage = 20;
+    let currentLetterFilter = 'all';
+
+    // 初始化页面
+    window.addEventListener('DOMContentLoaded', () => {
+      loadQslCards();
+      setInterval(loadQslCards, config.cacheExpireMinutes * 60 * 1000);
+      
+      // 事件监听
+      document.getElementById('search-btn').addEventListener('click', handleSearch);
+      document.getElementById('callsign-search').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') handleSearch();
+      });
+      document.getElementById('per-page').addEventListener('change', handlePerPageChange);
+      document.getElementById('prev-page').addEventListener('click', goToPrevPage);
+      document.getElementById('next-page').addEventListener('click', goToNextPage);
+    });
+
+    // 搜索处理
+    function handleSearch() {
+      const searchTerm = document.getElementById('callsign-search').value.trim().toLowerCase();
+      if (!searchTerm) return;
+      
+      // 查找匹配的呼号并跳转
+      const matchedCard = allQslCards.find(card => 
+        card.callsign.toLowerCase() === searchTerm
+      );
+      
+      if (matchedCard) {
+        window.location.href = `https://${config.githubUser}.github.io/${config.qslDir}/${matchedCard.callsign}.jpg`;
+      } else {
+        alert(`未找到呼号为 ${searchTerm} 的QSL卡`);
+      }
+    }
+
+    // 每页显示数量变更
+    function handlePerPageChange(e) {
+      itemsPerPage = parseInt(e.target.value);
+      currentPage = 1; // 重置到第一页
+      applyFiltersAndRender();
+    }
+
+    // 上一页
+    function goToPrevPage() {
+      if (currentPage > 1) {
+        currentPage--;
+        applyFiltersAndRender();
+      }
+    }
+
+    // 下一页
+    function goToNextPage() {
+      const totalPages = Math.ceil(filteredCards.length / itemsPerPage);
+      if (currentPage < totalPages) {
+        currentPage++;
+        applyFiltersAndRender();
+      }
+    }
+
+    // 字母筛选
+    function handleLetterFilter(letter) {
+      currentLetterFilter = letter;
+      currentPage = 1; // 重置到第一页
+      
+      // 更新筛选按钮样式
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        if (btn.dataset.letter === letter) {
+          btn.classList.add('filter-active');
+        } else {
+          btn.classList.remove('filter-active');
+        }
+      });
+      
+      applyFiltersAndRender();
+    }
+
+    // 应用筛选并渲染
+    function applyFiltersAndRender() {
+      // 应用首字母筛选
+      if (currentLetterFilter === 'all') {
+        filteredCards = [...allQslCards];
+      } else {
+        filteredCards = allQslCards.filter(card => 
+          card.callsign.charAt(0).toUpperCase() === currentLetterFilter
+        );
+      }
+      
+      // 计算分页
+      const totalPages = Math.ceil(filteredCards.length / itemsPerPage);
+      const startIndex = (currentPage - 1) * itemsPerPage;
+      const endIndex = startIndex + itemsPerPage;
+      const currentPageItems = filteredCards.slice(startIndex, endIndex);
+      
+      // 更新分页信息和按钮状态
+      document.getElementById('page-info').textContent = `第 ${currentPage} / ${totalPages || 1} 页`;
+      document.getElementById('prev-page').disabled = currentPage <= 1;
+      document.getElementById('next-page').disabled = currentPage >= totalPages || totalPages === 0;
+      
+      // 渲染当前页内容
+      renderCards(currentPageItems);
+      
+      // 显示/隐藏无结果提示
+      const noResultsEl = document.getElementById('no-results');
+      const containerEl = document.getElementById('qsl-container');
+      if (filteredCards.length === 0) {
+        noResultsEl.classList.remove('hidden');
+        containerEl.classList.add('hidden');
+      } else {
+        noResultsEl.classList.add('hidden');
+        containerEl.classList.remove('hidden');
+      }
+    }
 
     // 从缓存或API加载数据
     function loadQslCards() {
@@ -59,13 +237,13 @@
       const cachedData = localStorage.getItem(cacheKey);
       const now = new Date().getTime();
 
-      // 检查缓存是否有效（10分钟内）
+      // 检查缓存是否有效
       if (cachedData) {
         const { data, timestamp } = JSON.parse(cachedData);
         const expireTime = timestamp + (config.cacheExpireMinutes * 60 * 1000);
         
         if (now < expireTime) {
-          renderCards(data); // 使用缓存数据
+          processLoadedData(data);
           document.getElementById('last-update').textContent = 
             `最后更新：${new Date(timestamp).toLocaleString()}`;
           return;
@@ -79,25 +257,24 @@
           return response.json();
         })
         .then(files => {
-          // 筛选图片文件（排除文件夹，只保留.jpg/.png）
+          // 筛选图片文件并处理
           const validFiles = files
             .filter(file => file.type === 'file' && 
               (file.name.toLowerCase().endsWith('.jpg') || 
                file.name.toLowerCase().endsWith('.png')))
             .map(file => ({
-              callsign: file.name.replace(/\.(jpg|png)$/i, ''), // 提取呼号
-              url: file.download_url // 图片直接下载链接
+              callsign: file.name.replace(/\.(jpg|png)$/i, ''),
+              url: file.download_url
             }))
-            .sort((a, b) => a.callsign.localeCompare(b.callsign)); // 按呼号排序
+            .sort((a, b) => a.callsign.localeCompare(b.callsign));
 
-          // 保存到本地缓存（10分钟内不再调用API）
+          // 保存到本地缓存
           localStorage.setItem(cacheKey, JSON.stringify({
             data: validFiles,
             timestamp: now
           }));
 
-          // 渲染卡片
-          renderCards(validFiles);
+          processLoadedData(validFiles);
           document.getElementById('last-update').textContent = 
             `最后更新：${new Date(now).toLocaleString()}`;
         })
@@ -112,6 +289,42 @@
         });
     }
 
+    // 处理加载的数据
+    function processLoadedData(data) {
+      allQslCards = data;
+      
+      // 生成首字母筛选按钮
+      generateLetterFilters();
+      
+      // 应用筛选并渲染
+      applyFiltersAndRender();
+    }
+
+    // 生成首字母筛选按钮
+    function generateLetterFilters() {
+      const filterContainer = document.querySelector('.flex.flex-wrap.gap-2');
+      
+      // 清除现有字母按钮（保留"全部"按钮）
+      document.querySelectorAll('.filter-btn[data-letter]:not([data-letter="all"])').forEach(btn => {
+        btn.remove();
+      });
+      
+      // 提取所有首字母并去重
+      const firstLetters = [...new Set(
+        allQslCards.map(card => card.callsign.charAt(0).toUpperCase())
+      )].sort();
+      
+      // 创建字母筛选按钮
+      firstLetters.forEach(letter => {
+        const btn = document.createElement('button');
+        btn.className = 'filter-btn px-3 py-1 rounded border border-gray-300 text-sm hover:bg-gray-100 transition-colors';
+        btn.dataset.letter = letter;
+        btn.textContent = letter;
+        btn.addEventListener('click', () => handleLetterFilter(letter));
+        filterContainer.appendChild(btn);
+      });
+    }
+
     // 渲染QSL卡卡片
     function renderCards(cards) {
       const container = document.getElementById('qsl-container');
@@ -120,7 +333,7 @@
         container.innerHTML = `
           <div class="col-span-full text-center py-16 text-gray-500">
             <i class="fa fa-inbox text-5xl mb-4"></i>
-            <p>暂无QSL卡，请上传图片到qsl文件夹</p>
+            <p>当前页无QSL卡</p>
           </div>
         `;
         return;
@@ -138,10 +351,6 @@
         </div>
       `).join('');
     }
-
-    // 页面加载时执行，之后每10分钟自动刷新一次
-    window.addEventListener('DOMContentLoaded', loadQslCards);
-    setInterval(loadQslCards, config.cacheExpireMinutes * 60 * 1000);
   </script>
 </body>
 </html>
