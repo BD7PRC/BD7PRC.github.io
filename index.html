@@ -63,6 +63,13 @@
       .flip-back {
         transform: rotateY(180deg);
       }
+      /* DXCC统计样式 */
+      .dxcc-badge {
+        @apply inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200;
+      }
+      .dxcc-badge:hover {
+        @apply bg-blue-200;
+      }
     }
   </style>
 </head>
@@ -96,14 +103,25 @@
     <!-- 筛选和分页控制区 -->
     <div class="mb-6">
       <div class="flex flex-wrap items-center justify-between gap-4">
-        <!-- 首字母筛选 -->
-        <div class="flex flex-wrap gap-2">
-          <span class="text-sm text-gray-600 self-center">首字母筛选:</span>
-          <button class="filter-btn px-3 py-1 rounded border border-gray-300 text-sm hover:bg-gray-100 transition-colors filter-active" data-letter="all" disabled>全部</button>
-          <!-- A-Z字母按钮会动态生成 -->
+        <!-- 左侧：首字母筛选和DXCC统计 -->
+        <div class="flex flex-wrap items-center gap-4">
+          <!-- 首字母筛选 -->
+          <div class="flex flex-wrap gap-2">
+            <span class="text-sm text-gray-600 self-center">首字母筛选:</span>
+            <button class="filter-btn px-3 py-1 rounded border border-gray-300 text-sm hover:bg-gray-100 transition-colors filter-active" data-letter="all" disabled>全部</button>
+            <!-- A-Z字母按钮会动态生成 -->
+          </div>
+
+          <!-- DXCC统计 -->
+          <div class="flex items-center gap-2">
+            <span class="text-sm text-gray-600">DXCC统计:</span>
+            <div id="dxcc-stats" class="flex flex-wrap gap-1 max-w-md">
+              <div class="text-sm text-gray-500">加载中...</div>
+            </div>
+          </div>
         </div>
 
-        <!-- 分页控制 -->
+        <!-- 右侧：分页控制 -->
         <div class="flex items-center gap-4">
           <div class="flex items-center gap-2">
             <span class="text-sm text-gray-600">每页显示:</span>
@@ -233,7 +251,8 @@
       githubUser: "BD7PRC",
       githubRepo: "BD7PRC.github.io",
       qslDir: "qsl",
-      cacheExpireMinutes: 10
+      cacheExpireMinutes: 10,
+      dxccCacheExpireMinutes: 5 // DXCC统计缓存时间
     };
 
     // 所有可能的首字母 (A-Z)
@@ -249,6 +268,7 @@
     let currentCardSide = 'front'; // 当前显示的卡片面：front或back
     let currentCallsign = ''; // 当前显示的呼号
     let currentFrontImageUrl = ''; // 当前正面图片URL
+    let dxccStats = {}; // DXCC统计数据
 
     // 初始化页面
     window.addEventListener('DOMContentLoaded', () => {
@@ -483,6 +503,93 @@
       document.body.style.overflow = 'hidden';
     }
 
+    // DXCC统计功能
+    async function updateDxccStats() {
+      const cacheKey = 'dxccCache';
+      const cachedData = localStorage.getItem(cacheKey);
+      const now = new Date().getTime();
+
+      // 检查缓存
+      if (cachedData) {
+        const { data, timestamp } = JSON.parse(cachedData);
+        const expireTime = timestamp + (config.dxccCacheExpireMinutes * 60 * 1000);
+        
+        if (now < expireTime) {
+          renderDxccStats(data);
+          return;
+        }
+      }
+
+      // 获取所有呼号的DXCC信息
+      const callsigns = allQslCards.map(card => card.callsign);
+      const dxccResults = {};
+      
+      // 为每个呼号获取DXCC信息
+      for (const callsign of callsigns) {
+        try {
+          const dxccInfo = await getDxccInfo(callsign);
+          if (dxccInfo) {
+            if (!dxccResults[dxccInfo]) {
+              dxccResults[dxccInfo] = 0;
+            }
+            dxccResults[dxccInfo]++;
+          }
+        } catch (error) {
+          console.error(`获取 ${callsign} 的DXCC信息失败:`, error);
+        }
+        
+        // 添加延迟避免请求过于频繁
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      // 保存到缓存
+      localStorage.setItem(cacheKey, JSON.stringify({
+        data: dxccResults,
+        timestamp: now
+      }));
+
+      renderDxccStats(dxccResults);
+    }
+
+    // 获取单个呼号的DXCC信息
+    async function getDxccInfo(callsign) {
+      try {
+        const response = await fetch(`https://www.hamqth.com/dxcc.php?callsign=${callsign}`);
+        const text = await response.text();
+        
+        // 解析XML获取DXCC名称
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(text, "text/xml");
+        const nameElement = xmlDoc.getElementsByTagName('name')[0];
+        
+        if (nameElement && nameElement.textContent) {
+          return nameElement.textContent;
+        }
+      } catch (error) {
+        console.error(`获取 ${callsign} 的DXCC信息失败:`, error);
+      }
+      return null;
+    }
+
+    // 渲染DXCC统计
+    function renderDxccStats(stats) {
+      const container = document.getElementById('dxcc-stats');
+      
+      // 过滤掉数量为0的DXCC，并按数量排序
+      const sortedStats = Object.entries(stats)
+        .filter(([_, count]) => count > 0)
+        .sort((a, b) => b[1] - a[1]);
+      
+      if (sortedStats.length === 0) {
+        container.innerHTML = '<div class="text-sm text-gray-500">暂无DXCC数据</div>';
+        return;
+      }
+
+      container.innerHTML = sortedStats.map(([dxcc, count]) => 
+        `<span class="dxcc-badge" title="${dxcc}: ${count}个">${dxcc} <span class="ml-1 font-bold">${count}</span></span>`
+      ).join('');
+    }
+
     // 其他函数保持不变...
     function handlePerPageChange(e) {
       itemsPerPage = parseInt(e.target.value);
@@ -611,6 +718,8 @@
     function processLoadedData(data) {
       allQslCards = data;
       applyFiltersAndRender();
+      // 加载DXCC统计
+      updateDxccStats();
     }
 
     function generateAllLetterFilters() {
