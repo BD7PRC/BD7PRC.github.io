@@ -232,7 +232,8 @@
     const config = {
       githubUser: "BD7PRC",
       githubRepo: "BD7PRC.github.io",
-      qslDir: "qsl",
+      qslDir: "qsl", // 正面图片目录
+      qslBackDir: "qsl_b", // 背面图片目录
       cacheExpireMinutes: 10
     };
 
@@ -372,34 +373,27 @@
       testImage.src = backImageUrl;
     }
 
-    // 获取背面图片URL - 修复URL生成逻辑
+    // 获取背面图片URL - 使用独立的QSL_B目录
     function getBackImageUrl(callsign) {
-      // 从正面图片URL推断背面图片URL
+      // 从正面图片URL推断文件扩展名
       const frontUrl = currentFrontImageUrl;
       console.log('正面图片URL:', frontUrl); // 调试用
       
+      let extension = 'jpg'; // 默认扩展名
+      
       // 如果正面URL是GitHub的原始内容URL
       if (frontUrl.includes('githubusercontent.com')) {
-        // 提取文件名并替换为背面文件名
-        const baseUrl = frontUrl.substring(0, frontUrl.lastIndexOf('/') + 1);
+        // 提取文件名获取扩展名
         const fileName = frontUrl.substring(frontUrl.lastIndexOf('/') + 1);
-        
-        // 获取文件扩展名
         const extensionMatch = fileName.match(/\.(jpg|png|jpeg)$/i);
         if (extensionMatch) {
-          const extension = extensionMatch[1].toLowerCase();
-          const baseName = fileName.replace(/\.(jpg|png|jpeg)$/i, '');
-          
-          // 构造背面图片URL
-          const backUrl = `${baseUrl}${baseName}_B.${extension}`;
-          console.log('生成的背面URL:', backUrl); // 调试用
-          return backUrl;
+          extension = extensionMatch[1].toLowerCase();
         }
       }
       
-      // 备用方案：直接构造URL
-      const backUrl = `https://raw.githubusercontent.com/${config.githubUser}/${config.githubRepo}/main/${config.qslDir}/${callsign}_B.jpg`;
-      console.log('备用背面URL:', backUrl); // 调试用
+      // 构造背面图片URL - 使用独立的qsl_b目录
+      const backUrl = `https://raw.githubusercontent.com/${config.githubUser}/${config.githubRepo}/main/${config.qslBackDir}/${callsign}.${extension}`;
+      console.log('生成的背面URL:', backUrl); // 调试用
       return backUrl;
     }
 
