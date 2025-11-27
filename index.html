@@ -195,7 +195,7 @@
                   <img id="modal-image-front" src="" alt="QSL卡正面" class="w-full h-full object-contain">
                   <div id="modal-error-front" class="hidden absolute inset-0 bg-gray-200 flex flex-col items-center justify-center text-gray-500">
                     <i class="fa fa-exclamation-circle text-5xl mb-4"></i>
-                    <p class="text-xl">图片加载失败 (404)</p>
+                    <p class="text-xl">图片加载失败</p>
                   </div>
                 </div>
               </div>
@@ -248,6 +248,7 @@
     let currentRotation = 0; // 图片旋转角度
     let currentCardSide = 'front'; // 当前显示的卡片面：front或back
     let currentCallsign = ''; // 当前显示的呼号
+    let currentFrontImageUrl = ''; // 当前正面图片URL
 
     // 初始化页面
     window.addEventListener('DOMContentLoaded', () => {
@@ -306,6 +307,10 @@
       currentCardSide = 'front'; // 重置为正面
       document.getElementById('flip-card-element').classList.remove('flipped');
       document.getElementById('modal-image-side').textContent = '正面';
+      
+      // 重置背面图片状态
+      document.getElementById('modal-image-back').src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23f3f4f6'/%3E%3C/svg%3E";
+      document.getElementById('modal-error-back').classList.add('hidden');
     }
 
     // 旋转当前图片功能
@@ -327,12 +332,8 @@
         sideIndicator.textContent = '背面';
         currentCardSide = 'back';
         
-        // 加载背面图片（如果尚未加载）
-        const backImage = document.getElementById('modal-image-back');
-        if (!backImage.src) {
-          const backImageUrl = getBackImageUrl(currentCallsign);
-          backImage.src = backImageUrl;
-        }
+        // 加载背面图片
+        loadBackImage();
       } else {
         // 切换回正面
         flipCardElement.classList.remove('flipped');
@@ -341,10 +342,65 @@
       }
     }
 
-    // 获取背面图片URL
+    // 加载背面图片
+    function loadBackImage() {
+      const backImage = document.getElementById('modal-image-back');
+      const backError = document.getElementById('modal-error-back');
+      
+      // 重置状态
+      backImage.classList.remove('hidden');
+      backError.classList.add('hidden');
+      
+      // 获取背面图片URL
+      const backImageUrl = getBackImageUrl(currentCallsign);
+      
+      console.log('尝试加载背面图片:', backImageUrl); // 调试用
+      
+      // 预加载图片检查是否可用
+      const testImage = new Image();
+      testImage.onload = function() {
+        // 背面图片存在，设置图片源
+        backImage.src = backImageUrl;
+        console.log('背面图片加载成功'); // 调试用
+      };
+      testImage.onerror = function() {
+        // 背面图片不存在，显示错误状态
+        backImage.classList.add('hidden');
+        backError.classList.remove('hidden');
+        console.log('背面图片加载失败'); // 调试用
+      };
+      testImage.src = backImageUrl;
+    }
+
+    // 获取背面图片URL - 修复URL生成逻辑
     function getBackImageUrl(callsign) {
-      // 假设背面图片命名规则为：呼号_B.jpg
-      return `https://raw.githubusercontent.com/${config.githubUser}/${config.githubRepo}/main/${config.qslDir}/${callsign}_B.jpg`;
+      // 从正面图片URL推断背面图片URL
+      const frontUrl = currentFrontImageUrl;
+      console.log('正面图片URL:', frontUrl); // 调试用
+      
+      // 如果正面URL是GitHub的原始内容URL
+      if (frontUrl.includes('githubusercontent.com')) {
+        // 提取文件名并替换为背面文件名
+        const baseUrl = frontUrl.substring(0, frontUrl.lastIndexOf('/') + 1);
+        const fileName = frontUrl.substring(frontUrl.lastIndexOf('/') + 1);
+        
+        // 获取文件扩展名
+        const extensionMatch = fileName.match(/\.(jpg|png|jpeg)$/i);
+        if (extensionMatch) {
+          const extension = extensionMatch[1].toLowerCase();
+          const baseName = fileName.replace(/\.(jpg|png|jpeg)$/i, '');
+          
+          // 构造背面图片URL
+          const backUrl = `${baseUrl}${baseName}_B.${extension}`;
+          console.log('生成的背面URL:', backUrl); // 调试用
+          return backUrl;
+        }
+      }
+      
+      // 备用方案：直接构造URL
+      const backUrl = `https://raw.githubusercontent.com/${config.githubUser}/${config.githubRepo}/main/${config.qslDir}/${callsign}_B.jpg`;
+      console.log('备用背面URL:', backUrl); // 调试用
+      return backUrl;
     }
 
     // 搜索处理
@@ -410,7 +466,9 @@
       modalImageFront.src = "";
       modalImageFront.classList.remove('hidden');
       modalErrorFront.classList.add('hidden');
-      modalImageBack.src = "";
+      
+      // 设置一个空的SVG作为背面图片初始值，避免显示主页
+      modalImageBack.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23f3f4f6'/%3E%3C/svg%3E";
       modalImageBack.classList.remove('hidden');
       modalErrorBack.classList.add('hidden');
       
@@ -418,6 +476,7 @@
       modalImageFront.src = imageUrl;
       modalTitle.textContent = callsign;
       currentCallsign = callsign;
+      currentFrontImageUrl = imageUrl; // 保存正面图片URL
       
       modal.classList.remove('hidden');
       modal.classList.add('flex');
