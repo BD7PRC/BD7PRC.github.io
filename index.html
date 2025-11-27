@@ -35,9 +35,33 @@
       .modal-image-container {
         @apply relative max-w-full max-h-[80vh] transition-transform duration-300;
       }
-      /* 确保按钮始终在最上层 */
-      .modal-controls {
-        @apply absolute top-0 right-0 flex gap-2 bg-black/50 p-2 rounded-lg z-10;
+      /* 翻页动画相关样式 */
+      .flip-container {
+        perspective: 1000px;
+        width: 100%;
+        height: 100%;
+      }
+      .flip-card {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        transition: transform 0.8s;
+        transform-style: preserve-3d;
+      }
+      .flip-card.flipped {
+        transform: rotateY(180deg);
+      }
+      .flip-front, .flip-back {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        backface-visibility: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .flip-back {
+        transform: rotateY(180deg);
       }
     }
   </style>
@@ -139,40 +163,69 @@
       </div>
     </div>
 
-    <!-- 大图查看弹窗（带旋转按钮） -->
+    <!-- 大图查看弹窗（优化版） -->
     <div id="image-modal" class="fixed inset-0 bg-black/80 z-50 hidden items-center justify-center p-4">
-      <div class="relative max-w-5xl w-full max-h-[90vh] flex items-center justify-center">
-        <!-- 旋转按钮和关闭按钮 - 确保在最上层 -->
-        <div class="modal-controls">
-          <button id="rotate-image" class="text-white hover:text-gray-300 p-2">
-            <i class="fa fa-rotate-right text-xl"></i>
-          </button>
-          <button id="close-image-modal" class="text-white hover:text-gray-300 p-2">
-            <i class="fa fa-times text-xl"></i>
-          </button>
-        </div>
-        
-        <!-- 图片容器 -->
-        <div class="modal-image-container">
-          <img id="modal-image" src="" alt="QSL卡大图" class="max-w-full max-h-[80vh] object-contain">
-          <div id="modal-error" class="hidden absolute inset-0 bg-gray-200 flex flex-col items-center justify-center text-gray-500">
-            <i class="fa fa-exclamation-circle text-5xl mb-4"></i>
-            <p class="text-xl">图片加载失败 (404)</p>
+      <div class="relative w-full h-full flex flex-col">
+        <!-- 顶部控制栏 -->
+        <div class="absolute top-0 left-0 right-0 bg-black/70 text-white p-4 z-10 flex justify-between items-center">
+          <div>
+            <h3 id="modal-image-title" class="text-xl font-bold"></h3>
+            <p id="modal-image-side" class="text-sm mt-1">正面</p>
+          </div>
+          <div class="flex gap-2">
+            <button id="flip-card" class="bg-white/20 hover:bg-white/30 p-2 rounded-full transition-colors" title="查看背面">
+              <i class="fa fa-exchange"></i>
+            </button>
+            <button id="rotate-image" class="bg-white/20 hover:bg-white/30 p-2 rounded-full transition-colors" title="旋转图片">
+              <i class="fa fa-rotate-right"></i>
+            </button>
+            <button id="close-image-modal" class="bg-white/20 hover:bg-white/30 p-2 rounded-full transition-colors" title="关闭">
+              <i class="fa fa-times"></i>
+            </button>
           </div>
         </div>
         
-        <div class="absolute bottom-0 left-0 right-0 text-center text-white p-4">
-          <h3 id="modal-image-title" class="text-xl font-bold"></h3>
+        <!-- 图片显示区域 -->
+        <div class="flex-1 flex items-center justify-center p-4 pt-16 pb-16">
+          <div class="flip-container max-w-4xl w-full h-full">
+            <div class="flip-card" id="flip-card-element">
+              <!-- 正面 -->
+              <div class="flip-front">
+                <div class="modal-image-container w-full h-full">
+                  <img id="modal-image-front" src="" alt="QSL卡正面" class="w-full h-full object-contain">
+                  <div id="modal-error-front" class="hidden absolute inset-0 bg-gray-200 flex flex-col items-center justify-center text-gray-500">
+                    <i class="fa fa-exclamation-circle text-5xl mb-4"></i>
+                    <p class="text-xl">图片加载失败 (404)</p>
+                  </div>
+                </div>
+              </div>
+              <!-- 背面 -->
+              <div class="flip-back">
+                <div class="modal-image-container w-full h-full">
+                  <img id="modal-image-back" src="" alt="QSL卡背面" class="w-full h-full object-contain">
+                  <div id="modal-error-back" class="hidden absolute inset-0 bg-gray-200 flex flex-col items-center justify-center text-gray-500">
+                    <i class="fa fa-exclamation-circle text-5xl mb-4"></i>
+                    <p class="text-xl">背面图片未找到</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 底部信息栏 -->
+        <div class="absolute bottom-0 left-0 right-0 bg-black/70 text-white p-4 z-10 text-center">
+          <p class="text-sm">使用 <i class="fa fa-exchange mx-1"></i> 按钮查看背面，<i class="fa fa-rotate-right mx-1"></i> 按钮旋转图片</p>
         </div>
       </div>
     </div>
   </main>
-  <!-- 在main标签结束后添加 -->
-<footer class="bg-primary text-white py-4 mt-8">
-  <div class="container mx-auto px-4 text-center">
-    <p>&copy; 2025 VR2WAA. 保留所有权利。All rights reserved.</p>
-  </div>
-</footer>
+  
+  <footer class="bg-primary text-white py-4 mt-8">
+    <div class="container mx-auto px-4 text-center">
+      <p>&copy; 2025 VR2WAA. 保留所有权利。All rights reserved.</p>
+    </div>
+  </footer>
 
   <script>
     // 配置
@@ -193,6 +246,8 @@
     let itemsPerPage = 20;
     let currentLetterFilter = 'all';
     let currentRotation = 0; // 图片旋转角度
+    let currentCardSide = 'front'; // 当前显示的卡片面：front或back
+    let currentCallsign = ''; // 当前显示的呼号
 
     // 初始化页面
     window.addEventListener('DOMContentLoaded', () => {
@@ -216,8 +271,11 @@
       });
       document.getElementById('close-image-modal').addEventListener('click', closeImageModal);
       
-      // 旋转按钮事件监听（关键修复：确保按钮能被正确找到并绑定事件）
+      // 旋转按钮事件监听
       document.getElementById('rotate-image').addEventListener('click', rotateCurrentImage);
+      
+      // 翻页按钮事件监听
+      document.getElementById('flip-card').addEventListener('click', flipCard);
       
       // 点击弹窗背景关闭大图查看
       document.getElementById('image-modal').addEventListener('click', (e) => {
@@ -227,19 +285,27 @@
       });
 
       // 大图弹窗图片加载失败处理
-      document.getElementById('modal-image').addEventListener('error', () => {
-        document.getElementById('modal-image').classList.add('hidden');
-        document.getElementById('modal-error').classList.remove('hidden');
+      document.getElementById('modal-image-front').addEventListener('error', () => {
+        document.getElementById('modal-image-front').classList.add('hidden');
+        document.getElementById('modal-error-front').classList.remove('hidden');
+      });
+      
+      document.getElementById('modal-image-back').addEventListener('error', () => {
+        document.getElementById('modal-image-back').classList.add('hidden');
+        document.getElementById('modal-error-back').classList.remove('hidden');
       });
     });
 
-    // 关闭图片弹窗并重置旋转状态
+    // 关闭图片弹窗并重置状态
     function closeImageModal() {
       document.getElementById('image-modal').classList.add('hidden');
       document.getElementById('image-modal').classList.remove('flex');
       document.body.style.overflow = '';
       currentRotation = 0; // 重置旋转角度
       document.querySelector('.modal-image-container').style.transform = 'rotate(0deg)';
+      currentCardSide = 'front'; // 重置为正面
+      document.getElementById('flip-card-element').classList.remove('flipped');
+      document.getElementById('modal-image-side').textContent = '正面';
     }
 
     // 旋转当前图片功能
@@ -248,6 +314,37 @@
       currentRotation = (currentRotation + 90) % 360;
       // 应用旋转样式，带动画效果
       document.querySelector('.modal-image-container').style.transform = `rotate(${currentRotation}deg)`;
+    }
+
+    // 翻页功能
+    function flipCard() {
+      const flipCardElement = document.getElementById('flip-card-element');
+      const sideIndicator = document.getElementById('modal-image-side');
+      
+      if (currentCardSide === 'front') {
+        // 切换到背面
+        flipCardElement.classList.add('flipped');
+        sideIndicator.textContent = '背面';
+        currentCardSide = 'back';
+        
+        // 加载背面图片（如果尚未加载）
+        const backImage = document.getElementById('modal-image-back');
+        if (!backImage.src) {
+          const backImageUrl = getBackImageUrl(currentCallsign);
+          backImage.src = backImageUrl;
+        }
+      } else {
+        // 切换回正面
+        flipCardElement.classList.remove('flipped');
+        sideIndicator.textContent = '正面';
+        currentCardSide = 'front';
+      }
+    }
+
+    // 获取背面图片URL
+    function getBackImageUrl(callsign) {
+      // 假设背面图片命名规则为：呼号_B.jpg
+      return `https://raw.githubusercontent.com/${config.githubUser}/${config.githubRepo}/main/${config.qslDir}/${callsign}_B.jpg`;
     }
 
     // 搜索处理
@@ -295,29 +392,36 @@
     // 显示大图弹窗
     function showImageModal(imageUrl, callsign) {
       const modal = document.getElementById('image-modal');
-      const modalImage = document.getElementById('modal-image');
-      const modalError = document.getElementById('modal-error');
+      const modalImageFront = document.getElementById('modal-image-front');
+      const modalErrorFront = document.getElementById('modal-error-front');
+      const modalImageBack = document.getElementById('modal-image-back');
+      const modalErrorBack = document.getElementById('modal-error-back');
       const modalTitle = document.getElementById('modal-image-title');
+      const sideIndicator = document.getElementById('modal-image-side');
       
-      // 重置旋转状态
+      // 重置状态
       currentRotation = 0;
       document.querySelector('.modal-image-container').style.transform = 'rotate(0deg)';
+      currentCardSide = 'front';
+      document.getElementById('flip-card-element').classList.remove('flipped');
+      sideIndicator.textContent = '正面';
       
-      modalImage.src = "";
-      modalImage.classList.remove('hidden');
-      modalError.classList.add('hidden');
+      // 重置图片和错误状态
+      modalImageFront.src = "";
+      modalImageFront.classList.remove('hidden');
+      modalErrorFront.classList.add('hidden');
+      modalImageBack.src = "";
+      modalImageBack.classList.remove('hidden');
+      modalErrorBack.classList.add('hidden');
       
-      modalImage.src = imageUrl;
+      // 设置正面图片
+      modalImageFront.src = imageUrl;
       modalTitle.textContent = callsign;
+      currentCallsign = callsign;
       
       modal.classList.remove('hidden');
       modal.classList.add('flex');
       document.body.style.overflow = 'hidden';
-      
-      // 确保按钮在图片加载后仍然可见
-      setTimeout(() => {
-        document.querySelector('.modal-controls').style.zIndex = '100';
-      }, 100);
     }
 
     // 其他函数保持不变...
