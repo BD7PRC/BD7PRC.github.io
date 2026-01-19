@@ -245,6 +245,25 @@
     </div>
   </footer>
 
+  <!-- 代理加速切换按钮 -->
+  <div class="fixed bottom-4 right-4 z-50">
+    <div class="relative">
+      <button id="proxy-toggle" class="bg-yellow-500 hover:bg-yellow-600 text-white rounded-full w-12 h-12 flex items-center justify-center shadow-lg transition-colors">
+        <i class="fa fa-bolt"></i>
+      </button>
+      <div id="proxy-dropdown" class="hidden absolute bottom-14 right-0 w-64 bg-white rounded-lg shadow-xl border border-gray-200 py-2">
+        <div class="px-4 py-2 text-sm font-medium text-gray-700 border-b border-gray-100">选择图片代理加速</div>
+        <ul>
+          <li class="px-4 py-2 hover:bg-gray-100 cursor-pointer proxy-option" data-proxy="https://v6.gh-proxy.org/">v6.gh-proxy.org</li>
+          <li class="px-4 py-2 hover:bg-gray-100 cursor-pointer proxy-option" data-proxy="https://gh-proxy.org/">gh-proxy.org</li>
+          <li class="px-4 py-2 hover:bg-gray-100 cursor-pointer proxy-option" data-proxy="https://hk.gh-proxy.org/">hk.gh-proxy.org</li>
+          <li class="px-4 py-2 hover:bg-gray-100 cursor-pointer proxy-option" data-proxy="https://cdn.gh-proxy.org/">cdn.gh-proxy.org</li>
+          <li class="px-4 py-2 hover:bg-gray-100 cursor-pointer proxy-option" data-proxy="https://edgeone.gh-proxy.org/">edgeone.gh-proxy.org</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
   <script>
     // 配置
     const config = {
@@ -255,6 +274,9 @@
       dxccCacheExpireMinutes: 5 // DXCC统计缓存时间
     };
 
+    // 代理配置
+    let currentProxy = localStorage.getItem('imageProxy') || 'https://v6.gh-proxy.org/';
+    
     // 所有可能的首字母 (A-Z)
     const allLetters = Array.from({length: 26}, (_, i) => String.fromCharCode(65 + i));
 
@@ -315,7 +337,52 @@
         document.getElementById('modal-image-back').classList.add('hidden');
         document.getElementById('modal-error-back').classList.remove('hidden');
       });
+      
+      // 代理切换相关事件
+      document.getElementById('proxy-toggle').addEventListener('click', toggleProxyDropdown);
+      document.querySelectorAll('.proxy-option').forEach(option => {
+        option.addEventListener('click', (e) => {
+          const selectedProxy = e.target.getAttribute('data-proxy');
+          changeProxy(selectedProxy);
+          toggleProxyDropdown();
+        });
+      });
     });
+
+    // 切换代理下拉菜单
+    function toggleProxyDropdown() {
+      const dropdown = document.getElementById('proxy-dropdown');
+      dropdown.classList.toggle('hidden');
+	  console.log("感谢互联网上每一个愿意开源和具有无私奉献精神的人——BH7GZB");
+    }
+
+    // 更改代理设置
+    function changeProxy(proxy) {
+      currentProxy = proxy;
+      localStorage.setItem('imageProxy', proxy);
+      // 更新当前显示的所有图片URL
+      updateAllImageUrls();
+    }
+
+    // 更新所有图片URL以使用新的代理
+    function updateAllImageUrls() {
+      // 重新加载QSL卡片以应用新代理
+      loadQslCards();
+    }
+
+    // 使用代理构建图片URL
+    function buildProxyUrl(originalUrl) {
+      // 确保原URL是raw.githubusercontent.com格式
+      if (!originalUrl.includes('raw.githubusercontent.com')) {
+        return originalUrl; // 如果不是GitHub raw URL，直接返回
+      }
+      
+      // 移除可能存在的已有代理前缀
+      const cleanUrl = originalUrl.replace(/https:\/\/[^\/]*gh-proxy\.org\//, '');
+      
+      // 构建带代理的URL
+      return currentProxy + cleanUrl;
+    }
 
     // 关闭图片弹窗并重置状态
     function closeImageModal() {
@@ -380,7 +447,7 @@
       const testImage = new Image();
       testImage.onload = function() {
         // 背面图片存在，设置图片源
-        backImage.src = backImageUrl;
+        backImage.src = buildProxyUrl(backImageUrl);
         console.log('背面图片加载成功'); // 调试用
       };
       testImage.onerror = function() {
@@ -389,7 +456,7 @@
         backError.classList.remove('hidden');
         console.log('背面图片加载失败'); // 调试用
       };
-      testImage.src = backImageUrl;
+      testImage.src = buildProxyUrl(backImageUrl);
     }
 
     // 获取背面图片URL - 修复URL生成逻辑
@@ -443,13 +510,13 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             ${matchedCards.map(card => `
               <div class="border rounded-lg overflow-hidden">
-                <div class="image-container" onclick="showImageModal('${card.url}', '${card.callsign}')">
-                  <img src="${card.url}" alt="${card.callsign}" 
+                <div class="image-container" onclick="showImageModal('${buildProxyUrl(card.url)}', '${card.callsign}')">
+                  <img src="${buildProxyUrl(card.url)}" alt="${card.callsign}" 
                        onerror="this.parentElement.innerHTML = '<div class=\'error-overlay\'><i class=\'fa fa-exclamation-circle text-3xl mb-2\'></i><p>图片加载失败</p></div>'">
                 </div>
                 <div class="p-2 text-center">
                   <h4 class="font-bold">${card.callsign}</h4>
-                  <button onclick="showImageModal('${card.url}', '${card.callsign}')" class="text-primary hover:underline text-sm mt-1 inline-block">
+                  <button onclick="showImageModal('${buildProxyUrl(card.url)}', '${card.callsign}')" class="text-primary hover:underline text-sm mt-1 inline-block">
                     查看大图 <i class="fa fa-search-plus"></i>
                   </button>
                 </div>
@@ -716,7 +783,11 @@
     }
 
     function processLoadedData(data) {
-      allQslCards = data;
+      // 应用代理到所有图片URL
+      allQslCards = data.map(card => ({
+        ...card,
+        url: buildProxyUrl(card.url)
+      }));
       applyFiltersAndRender();
       // 加载DXCC统计
       updateDxccStats();
