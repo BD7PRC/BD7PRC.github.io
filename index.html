@@ -103,8 +103,16 @@
     <!-- 筛选和分页控制区 -->
     <div class="mb-6">
       <div class="flex flex-wrap items-center justify-between gap-4">
-        <!-- 左侧：首字母筛选和DXCC统计 -->
+        <!-- 左侧：新增分类（6米/卫星）→ 首字母筛选 → DXCC统计 -->
         <div class="flex flex-wrap items-center gap-4">
+          <!-- 新增：6米/卫星分类筛选 -->
+          <div class="flex flex-wrap gap-2">
+            <span class="text-sm text-gray-600 self-center">类型筛选:</span>
+            <button class="type-filter-btn px-3 py-1 rounded border border-gray-300 text-sm hover:bg-gray-100 transition-colors filter-active" data-type="all" disabled>全部</button>
+            <button class="type-filter-btn px-3 py-1 rounded border border-gray-300 text-sm hover:bg-gray-100 transition-colors" data-type="6m">6米波段</button>
+            <button class="type-filter-btn px-3 py-1 rounded border border-gray-300 text-sm hover:bg-gray-100 transition-colors" data-type="SAT">卫星</button>
+          </div>
+
           <!-- 首字母筛选 -->
           <div class="flex flex-wrap gap-2">
             <span class="text-sm text-gray-600 self-center">首字母筛选:</span>
@@ -280,12 +288,13 @@
     // 所有可能的首字母 (A-Z)
     const allLetters = Array.from({length: 26}, (_, i) => String.fromCharCode(65 + i));
 
-    // 状态管理
+    // 状态管理 - 新增类型筛选状态
     let allQslCards = [];
     let filteredCards = [];
     let currentPage = 1;
     let itemsPerPage = 20;
     let currentLetterFilter = 'all';
+    let currentTypeFilter = 'all'; // 新增：6m/SAT/全部
     let currentRotation = 0; // 图片旋转角度
     let currentCardSide = 'front'; // 当前显示的卡片面：front或back
     let currentCallsign = ''; // 当前显示的呼号
@@ -296,6 +305,9 @@
     window.addEventListener('DOMContentLoaded', () => {
       // 生成所有首字母筛选按钮
       generateAllLetterFilters();
+      
+      // 新增：绑定类型筛选按钮事件
+      bindTypeFilterEvents();
       
       loadQslCards();
       setInterval(loadQslCards, config.cacheExpireMinutes * 60 * 1000);
@@ -348,6 +360,27 @@
         });
       });
     });
+
+    // 新增：绑定类型筛选按钮事件
+    function bindTypeFilterEvents() {
+      document.querySelectorAll('.type-filter-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          // 移除所有类型按钮的激活状态
+          document.querySelectorAll('.type-filter-btn').forEach(b => {
+            b.classList.remove('filter-active');
+            b.disabled = false;
+          });
+          // 激活当前按钮
+          e.target.classList.add('filter-active');
+          e.target.disabled = true;
+          // 更新当前类型筛选
+          currentTypeFilter = e.target.getAttribute('data-type');
+          // 重置页码并重新筛选卡片
+          currentPage = 1;
+          filterAndRenderCards();
+        });
+      });
+    }
 
     // 切换代理下拉菜单
     function toggleProxyDropdown() {
@@ -477,382 +510,440 @@
           const extension = extensionMatch[1].toLowerCase();
           const baseName = fileName.replace(/\.(jpg|png|jpeg)$/i, '');
           
+          // 构造背面图片URL（兼容6m/SAT后缀）
+          let backBaseName = baseName;
+          // 先移除_6m/_SAT后缀（如果有），加_B后再加回来
+          const typeSuffixMatch = backBaseName.match(/_(6m|SAT)$/);
+          let typeSuffix = '';
+          if (typeSuffixMatch) {
+            typeSuffix = typeSuffixMatch[0];
+            backBaseName = backBaseName.replace(typeSuffix, '');
+          }
+          // 拼接背面文件名：基础名_B_类型后缀.扩展名
+          backBaseName = `${backBaseName}_B${typeSuffix}`;
+          
           // 构造背面图片URL
-          const backUrl = `${baseUrl}${baseName}_B.${extension}`;
-          console.log('生成的背面URL:', backUrl); // 调试用
+          const backUrl = `${baseUrl}${backBaseName}.${extension}`;
           return backUrl;
         }
       }
-      
-      // 备用方案：直接构造URL
-      const backUrl = `https://raw.githubusercontent.com/${config.githubUser}/${config.githubRepo}/main/${config.qslDir}/${callsign}_B.jpg`;
-      console.log('备用背面URL:', backUrl); // 调试用
-      return backUrl;
+      // 兼容返回原始逻辑
+      return frontUrl.replace(/\.jpg$/, '_B.jpg').replace(/\.png$/, '_B.png').replace(/\.jpeg$/, '_B.jpeg');
     }
 
-    // 搜索处理
-    function handleSearch() {
-      const searchTerm = document.getElementById('callsign-search').value.trim().toLowerCase();
-      if (!searchTerm) return;
+    // 生成所有首字母筛选按钮
+    function generateAllLetterFilters() {
+      const letterFilterContainer = document.querySelector('.filter-btn[data-letter="all"]').parentNode;
       
-      const matchedCards = allQslCards.filter(card => 
-        card.callsign.toLowerCase().includes(searchTerm)
-      );
-      
-      const modal = document.getElementById('search-modal');
-      const modalTitle = document.getElementById('modal-title');
-      const modalContent = document.getElementById('modal-content');
-      
-      if (matchedCards.length > 0) {
-        modalTitle.textContent = `找到 ${matchedCards.length} 个匹配结果: ${searchTerm}`;
+      allLetters.forEach(letter => {
+        const button = document.createElement('button');
+        button.className = 'filter-btn px-3 py-1 rounded border border-gray-300 text-sm hover:bg-gray-100 transition-colors';
+        button.setAttribute('data-letter', letter);
+        button.textContent = letter;
         
-        modalContent.innerHTML = `
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            ${matchedCards.map(card => `
-              <div class="border rounded-lg overflow-hidden">
-                <div class="image-container" onclick="showImageModal('${buildProxyUrl(card.url)}', '${card.callsign}')">
-                  <img src="${buildProxyUrl(card.url)}" alt="${card.callsign}" 
-                       onerror="this.parentElement.innerHTML = '<div class=\'error-overlay\'><i class=\'fa fa-exclamation-circle text-3xl mb-2\'></i><p>图片加载失败</p></div>'">
-                </div>
-                <div class="p-2 text-center">
-                  <h4 class="font-bold">${card.callsign}</h4>
-                  <button onclick="showImageModal('${buildProxyUrl(card.url)}', '${card.callsign}')" class="text-primary hover:underline text-sm mt-1 inline-block">
-                    查看大图 <i class="fa fa-search-plus"></i>
-                  </button>
-                </div>
-              </div>
-            `).join('')}
-          </div>
-        `;
+        button.addEventListener('click', (e) => {
+          // 移除所有字母按钮的激活状态
+          document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.classList.remove('filter-active');
+            btn.disabled = false;
+          });
+          // 激活当前按钮
+          e.target.classList.add('filter-active');
+          e.target.disabled = true;
+          // 更新当前字母筛选
+          currentLetterFilter = letter;
+          // 重置页码并重新筛选卡片
+          currentPage = 1;
+          filterAndRenderCards();
+        });
         
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
+        letterFilterContainer.appendChild(button);
+      });
+    }
+
+    // 筛选并渲染卡片（核心：新增类型筛选逻辑）
+    function filterAndRenderCards() {
+      // 1. 应用类型筛选（6m/SAT/全部）
+      let tempFiltered = [...allQslCards];
+      if (currentTypeFilter !== 'all') {
+        tempFiltered = tempFiltered.filter(card => {
+          // 匹配文件名中的_6m或_SAT后缀（忽略_B）
+          const fileName = card.name.toLowerCase();
+          // 先移除_B后缀，再检查类型
+          const nameWithoutBack = fileName.replace(/_b/, '');
+          return nameWithoutBack.includes(`_${currentTypeFilter.toLowerCase()}`);
+        });
+      }
+
+      // 2. 应用首字母筛选
+      if (currentLetterFilter !== 'all') {
+        tempFiltered = tempFiltered.filter(card => {
+          // 提取呼号首字母（忽略_6m/_SAT/_B后缀）
+          const callsign = getPureCallsign(card.name);
+          return callsign.charAt(0).toUpperCase() === currentLetterFilter;
+        });
+      }
+
+      // 3. 更新筛选后的数据
+      filteredCards = tempFiltered;
+
+      // 4. 处理分页
+      const totalPages = Math.ceil(filteredCards.length / itemsPerPage);
+      const startIndex = (currentPage - 1) * itemsPerPage;
+      const endIndex = startIndex + itemsPerPage;
+      const cardsToRender = filteredCards.slice(startIndex, endIndex);
+
+      // 5. 更新分页控件状态
+      document.getElementById('prev-page').disabled = currentPage === 1;
+      document.getElementById('next-page').disabled = currentPage === totalPages || filteredCards.length === 0;
+      document.getElementById('page-info').textContent = `第 ${currentPage} 页 / 共 ${Math.max(totalPages, 1)} 页`;
+
+      // 6. 渲染卡片
+      const container = document.getElementById('qsl-container');
+      container.innerHTML = '';
+
+      if (cardsToRender.length === 0) {
+        // 显示无结果
+        document.getElementById('no-results').classList.remove('hidden');
       } else {
-        alert(`未找到包含 "${searchTerm}" 的QSL卡`);
+        // 隐藏无结果
+        document.getElementById('no-results').classList.add('hidden');
+        // 渲染卡片
+        cardsToRender.forEach(card => {
+          const cardElement = createCardElement(card);
+          container.appendChild(cardElement);
+        });
       }
     }
 
-    // 显示大图弹窗
-    function showImageModal(imageUrl, callsign) {
-      const modal = document.getElementById('image-modal');
-      const modalImageFront = document.getElementById('modal-image-front');
-      const modalErrorFront = document.getElementById('modal-error-front');
-      const modalImageBack = document.getElementById('modal-image-back');
-      const modalErrorBack = document.getElementById('modal-error-back');
-      const modalTitle = document.getElementById('modal-image-title');
-      const sideIndicator = document.getElementById('modal-image-side');
+    // 新增：提取纯呼号（移除_B/_6m/_SAT后缀和扩展名）
+    function getPureCallsign(fileName) {
+      // 步骤：1. 移除扩展名 2. 移除_B 3. 移除_6m/_SAT
+      let pureName = fileName.replace(/\.(jpg|png|jpeg)$/i, ''); // 移除扩展名
+      pureName = pureName.replace(/_B/i, ''); // 移除_B
+      pureName = pureName.replace(/_6m/i, '').replace(/_SAT/i, ''); // 移除_6m/_SAT
+      return pureName;
+    }
+
+    // 创建卡片元素
+    function createCardElement(card) {
+      const pureCallsign = getPureCallsign(card.name);
+      const cardDiv = document.createElement('div');
+      cardDiv.className = 'card-hover';
       
-      // 重置状态
-      currentRotation = 0;
-      document.querySelector('.modal-image-container').style.transform = 'rotate(0deg)';
-      currentCardSide = 'front';
-      document.getElementById('flip-card-element').classList.remove('flipped');
-      sideIndicator.textContent = '正面';
+      const imageContainer = document.createElement('div');
+      imageContainer.className = 'image-container';
       
-      // 重置图片和错误状态
-      modalImageFront.src = "";
-      modalImageFront.classList.remove('hidden');
-      modalErrorFront.classList.add('hidden');
+      const img = document.createElement('img');
+      img.src = buildProxyUrl(card.download_url);
+      img.alt = pureCallsign;
+      img.loading = 'lazy';
       
-      // 设置一个空的SVG作为背面图片初始值，避免显示主页
-      modalImageBack.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23f3f4f6'/%3E%3C/svg%3E";
-      modalImageBack.classList.remove('hidden');
-      modalErrorBack.classList.add('hidden');
+      // 图片加载失败处理
+      img.addEventListener('error', () => {
+        imageContainer.innerHTML = `
+          <div class="error-overlay">
+            <i class="fa fa-exclamation-circle text-5xl mb-4"></i>
+            <p class="text-xl">图片加载失败</p>
+          </div>
+        `;
+      });
       
-      // 设置正面图片
-      modalImageFront.src = imageUrl;
-      modalTitle.textContent = callsign;
+      // 点击卡片打开大图
+      imageContainer.addEventListener('click', () => {
+        openImageModal(pureCallsign, card.download_url);
+      });
+      
+      imageContainer.appendChild(img);
+      cardDiv.appendChild(imageContainer);
+      
+      // 卡片底部添加呼号和类型标签
+      const cardFooter = document.createElement('div');
+      cardFooter.className = 'mt-2 text-center text-sm text-gray-700';
+      
+      // 显示纯呼号
+      const callsignText = document.createElement('div');
+      callsignText.textContent = pureCallsign;
+      callsignText.className = 'font-medium';
+      
+      // 显示类型标签（6m/SAT）
+      const typeTag = document.createElement('div');
+      typeTag.className = 'mt-1 text-xs';
+      const fileName = card.name.toLowerCase();
+      if (fileName.includes('_6m')) {
+        typeTag.innerHTML = '<span class="bg-green-100 text-green-800 px-2 py-0.5 rounded-full">6米波段</span>';
+      } else if (fileName.includes('_sat')) {
+        typeTag.innerHTML = '<span class="bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full">卫星</span>';
+      } else {
+        typeTag.innerHTML = '<span class="bg-gray-100 text-gray-800 px-2 py-0.5 rounded-full">普通</span>';
+      }
+      
+      cardFooter.appendChild(callsignText);
+      cardFooter.appendChild(typeTag);
+      cardDiv.appendChild(cardFooter);
+      
+      return cardDiv;
+    }
+
+    // 打开图片弹窗
+    function openImageModal(callsign, imageUrl) {
       currentCallsign = callsign;
-      currentFrontImageUrl = imageUrl; // 保存正面图片URL
+      currentFrontImageUrl = imageUrl;
       
+      const modal = document.getElementById('image-modal');
+      const modalTitle = document.getElementById('modal-image-title');
+      const modalImage = document.getElementById('modal-image-front');
+      const modalError = document.getElementById('modal-error-front');
+      
+      // 重置弹窗状态
+      modalTitle.textContent = callsign;
+      modalImage.src = buildProxyUrl(imageUrl);
+      modalImage.classList.remove('hidden');
+      modalError.classList.add('hidden');
+      
+      // 显示弹窗
       modal.classList.remove('hidden');
       modal.classList.add('flex');
       document.body.style.overflow = 'hidden';
     }
 
-    // DXCC统计功能
-    async function updateDxccStats() {
-      const cacheKey = 'dxccCache';
-      const cachedData = localStorage.getItem(cacheKey);
-      const now = new Date().getTime();
-
-      // 检查缓存
-      if (cachedData) {
-        const { data, timestamp } = JSON.parse(cachedData);
-        const expireTime = timestamp + (config.dxccCacheExpireMinutes * 60 * 1000);
-        
-        if (now < expireTime) {
-          renderDxccStats(data);
-          return;
-        }
-      }
-
-      // 获取所有呼号的DXCC信息
-      const callsigns = allQslCards.map(card => card.callsign);
-      const dxccResults = {};
+    // 处理搜索
+    function handleSearch() {
+      const searchTerm = document.getElementById('callsign-search').value.trim().toUpperCase();
+      if (!searchTerm) return;
       
-      // 为每个呼号获取DXCC信息
-      for (const callsign of callsigns) {
-        try {
-          const dxccInfo = await getDxccInfo(callsign);
-          if (dxccInfo) {
-            if (!dxccResults[dxccInfo]) {
-              dxccResults[dxccInfo] = 0;
-            }
-            dxccResults[dxccInfo]++;
-          }
-        } catch (error) {
-          console.error(`获取 ${callsign} 的DXCC信息失败:`, error);
-        }
+      const modal = document.getElementById('search-modal');
+      const modalTitle = document.getElementById('modal-title');
+      const modalContent = document.getElementById('modal-content');
+      
+      modalTitle.textContent = `搜索结果: ${searchTerm}`;
+      
+      // 筛选匹配的卡片
+      const matches = allQslCards.filter(card => {
+        const pureCallsign = getPureCallsign(card.name).toUpperCase();
+        return pureCallsign.includes(searchTerm);
+      });
+      
+      // 渲染搜索结果
+      if (matches.length === 0) {
+        modalContent.innerHTML = '<div class="text-center py-8 text-gray-500"><i class="fa fa-search text-5xl mb-4"></i><p>未找到匹配的QSL卡</p></div>';
+      } else {
+        modalContent.innerHTML = `
+          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+            ${matches.map(card => {
+              const pureCallsign = getPureCallsign(card.name);
+              return `
+                <div class="card-hover">
+                  <div class="image-container" data-callsign="${pureCallsign}" data-url="${card.download_url}">
+                    <img src="${buildProxyUrl(card.download_url)}" alt="${pureCallsign}" loading="lazy">
+                  </div>
+                  <div class="mt-2 text-center text-sm text-gray-700">
+                    <div class="font-medium">${pureCallsign}</div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
         
-        // 添加延迟避免请求过于频繁
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // 绑定搜索结果卡片点击事件
+        document.querySelectorAll('#modal-content .image-container').forEach(container => {
+          container.addEventListener('click', (e) => {
+            const callsign = e.currentTarget.getAttribute('data-callsign');
+            const url = e.currentTarget.getAttribute('data-url');
+            openImageModal(callsign, url);
+            // 关闭搜索弹窗
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+          });
+        });
       }
-
-      // 保存到缓存
-      localStorage.setItem(cacheKey, JSON.stringify({
-        data: dxccResults,
-        timestamp: now
-      }));
-
-      renderDxccStats(dxccResults);
+      
+      // 显示搜索弹窗
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
     }
 
-    // 获取单个呼号的DXCC信息
-    async function getDxccInfo(callsign) {
-      try {
-        const response = await fetch(`https://www.hamqth.com/dxcc.php?callsign=${callsign}`);
-        const text = await response.text();
-        
-        // 解析XML获取DXCC名称
-        const parser = new DOMParser();
-        const xmlDoc = parser.parseFromString(text, "text/xml");
-        const nameElement = xmlDoc.getElementsByTagName('name')[0];
-        
-        if (nameElement && nameElement.textContent) {
-          return nameElement.textContent;
-        }
-      } catch (error) {
-        console.error(`获取 ${callsign} 的DXCC信息失败:`, error);
-      }
-      return null;
-    }
-
-    // 渲染DXCC统计
-    function renderDxccStats(stats) {
-      const container = document.getElementById('dxcc-stats');
-      
-      // 过滤掉数量为0的DXCC，并按数量排序
-      const sortedStats = Object.entries(stats)
-        .filter(([_, count]) => count > 0)
-        .sort((a, b) => b[1] - a[1]);
-      
-      if (sortedStats.length === 0) {
-        container.innerHTML = '<div class="text-sm text-gray-500">暂无DXCC数据</div>';
-        return;
-      }
-
-      container.innerHTML = sortedStats.map(([dxcc, count]) => 
-        `<span class="dxcc-badge" title="${dxcc}: ${count}个">${dxcc} <span class="ml-1 font-bold">${count}</span></span>`
-      ).join('');
-    }
-
-    // 其他函数保持不变...
+    // 处理每页显示数量变更
     function handlePerPageChange(e) {
       itemsPerPage = parseInt(e.target.value);
-      currentPage = 1;
-      applyFiltersAndRender();
+      currentPage = 1; // 重置页码
+      filterAndRenderCards();
     }
 
+    // 上一页
     function goToPrevPage() {
       if (currentPage > 1) {
         currentPage--;
-        applyFiltersAndRender();
+        filterAndRenderCards();
       }
     }
 
+    // 下一页
     function goToNextPage() {
       const totalPages = Math.ceil(filteredCards.length / itemsPerPage);
       if (currentPage < totalPages) {
         currentPage++;
-        applyFiltersAndRender();
+        filterAndRenderCards();
       }
     }
 
-    function handleLetterFilter(letter) {
-      currentLetterFilter = letter;
-      currentPage = 1;
-      
-      document.querySelectorAll('.filter-btn').forEach(btn => {
-        if (btn.dataset.letter === letter) {
-          btn.classList.add('filter-active');
-        } else {
-          btn.classList.remove('filter-active');
-        }
-      });
-      
-      applyFiltersAndRender();
-    }
-
-    function applyFiltersAndRender() {
-      if (currentLetterFilter === 'all') {
-        filteredCards = [...allQslCards];
-      } else {
-        filteredCards = allQslCards.filter(card => 
-          card.callsign.charAt(0).toUpperCase() === currentLetterFilter
-        );
-      }
-      
-      const totalPages = Math.ceil(filteredCards.length / itemsPerPage);
-      const startIndex = (currentPage - 1) * itemsPerPage;
-      const endIndex = startIndex + itemsPerPage;
-      const currentPageItems = filteredCards.slice(startIndex, endIndex);
-      
-      document.getElementById('page-info').textContent = `第 ${currentPage} / ${totalPages || 1} 页`;
-      document.getElementById('prev-page').disabled = currentPage <= 1;
-      document.getElementById('next-page').disabled = currentPage >= totalPages || totalPages === 0;
-      
-      renderCards(currentPageItems);
-      updateLetterButtonStates();
-      
-      const noResultsEl = document.getElementById('no-results');
-      const containerEl = document.getElementById('qsl-container');
-      if (filteredCards.length === 0) {
-        noResultsEl.classList.remove('hidden');
-        containerEl.classList.add('hidden');
-      } else {
-        noResultsEl.classList.add('hidden');
-        containerEl.classList.remove('hidden');
-      }
-    }
-
+    // 加载QSL卡列表
     function loadQslCards() {
-      const cacheKey = 'qslCache';
+      const cacheKey = `qslCards_${config.githubUser}_${config.githubRepo}`;
+      const cacheTimeKey = `qslCardsCacheTime_${config.githubUser}_${config.githubRepo}`;
+      
+      // 检查缓存
       const cachedData = localStorage.getItem(cacheKey);
+      const cachedTime = localStorage.getItem(cacheTimeKey);
       const now = new Date().getTime();
-
-      if (cachedData) {
-        const { data, timestamp } = JSON.parse(cachedData);
-        const expireTime = timestamp + (config.cacheExpireMinutes * 60 * 1000);
-        
-        if (now < expireTime) {
-          processLoadedData(data);
-          document.getElementById('last-update').textContent = 
-            `最后更新：${new Date(timestamp).toLocaleString()}`;
-          return;
-        }
+      
+      // 如果缓存存在且未过期
+      if (cachedData && cachedTime && (now - cachedTime) < (config.cacheExpireMinutes * 60 * 1000)) {
+        allQslCards = JSON.parse(cachedData);
+        updateLastUpdateTime(new Date(parseInt(cachedTime)));
+        filterAndRenderCards();
+        loadDXCCStats(); // 加载DXCC统计
+        return;
       }
-
-      fetch(`https://api.github.com/repos/${config.githubUser}/${config.githubRepo}/contents/${config.qslDir}`)
+      
+      // 从GitHub加载
+      const apiUrl = `https://api.github.com/repos/${config.githubUser}/${config.githubRepo}/contents/${config.qslDir}`;
+      
+      fetch(apiUrl)
         .then(response => {
-          if (!response.ok) throw new Error(`加载失败: ${response.status}`);
+          if (!response.ok) throw new Error('GitHub API 请求失败');
           return response.json();
         })
-        .then(files => {
-          // 过滤掉文件名以 _B.jpg 或 _B.png 结尾的背面图片
-          const validFiles = files
-            .filter(file => file.type === 'file' && 
-              (file.name.toLowerCase().endsWith('.jpg') || 
-               file.name.toLowerCase().endsWith('.png')))
-            .filter(file => !file.name.toLowerCase().endsWith('_b.jpg') && 
-                           !file.name.toLowerCase().endsWith('_b.png'))
-            .map(file => ({
-              callsign: file.name.replace(/\.(jpg|png)$/i, ''),
-              url: file.download_url
-            }))
-            .sort((a, b) => a.callsign.localeCompare(b.callsign));
-
-          localStorage.setItem(cacheKey, JSON.stringify({
-            data: validFiles,
-            timestamp: now
-          }));
-
-          processLoadedData(validFiles);
-          document.getElementById('last-update').textContent = 
-            `最后更新：${new Date(now).toLocaleString()}`;
+        .then(data => {
+          // 过滤出图片文件
+          const imageFiles = data.filter(item => {
+            const name = item.name.toLowerCase();
+            return name.endsWith('.jpg') || name.endsWith('.png') || name.endsWith('.jpeg');
+          });
+          
+          // 按文件名排序
+          imageFiles.sort((a, b) => a.name.localeCompare(b.name));
+          
+          // 保存到缓存
+          localStorage.setItem(cacheKey, JSON.stringify(imageFiles));
+          localStorage.setItem(cacheTimeKey, now.toString());
+          
+          // 更新数据
+          allQslCards = imageFiles;
+          updateLastUpdateTime(new Date());
+          filterAndRenderCards();
+          loadDXCCStats(); // 加载DXCC统计
         })
         .catch(error => {
-          console.error('错误:', error);
+          console.error('加载QSL卡失败:', error);
           document.getElementById('qsl-container').innerHTML = `
-            <div class="col-span-full text-center py-16 text-red-500">
-              <i class="fa fa-exclamation-triangle text-5xl mb-4"></i>
-              <p>加载失败，请稍后重试</p>
+            <div class="col-span-full text-center py-16 text-gray-500">
+              <i class="fa fa-exclamation-circle text-5xl text-primary mb-4"></i>
+              <p>加载QSL卡列表失败，请稍后重试</p>
+              <p class="text-sm mt-2">错误: ${error.message}</p>
             </div>
           `;
         });
     }
 
-    function processLoadedData(data) {
-      // 应用代理到所有图片URL
-      allQslCards = data.map(card => ({
-        ...card,
-        url: buildProxyUrl(card.url)
-      }));
-      applyFiltersAndRender();
-      // 加载DXCC统计
-      updateDxccStats();
-    }
-
-    function generateAllLetterFilters() {
-      const filterContainer = document.querySelector('.flex.flex-wrap.gap-2');
-      
-      allLetters.forEach(letter => {
-        const btn = document.createElement('button');
-        btn.className = 'filter-btn px-3 py-1 rounded border border-gray-300 text-sm hover:bg-gray-100 transition-colors opacity-50';
-        btn.dataset.letter = letter;
-        btn.textContent = letter;
-        btn.disabled = true;
-        btn.addEventListener('click', () => handleLetterFilter(letter));
-        filterContainer.appendChild(btn);
+    // 更新最后更新时间
+    function updateLastUpdateTime(date) {
+      const formatted = date.toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
       });
+      document.getElementById('last-update').textContent = `最后更新：${formatted}`;
     }
 
-    function updateLetterButtonStates() {
-      const existingLetters = new Set(
-        allQslCards.map(card => card.callsign.charAt(0).toUpperCase())
-      );
+    // 加载DXCC统计
+    function loadDXCCStats() {
+      const cacheKey = `dxccStats_${config.githubUser}_${config.githubRepo}`;
+      const cacheTimeKey = `dxccStatsCacheTime_${config.githubUser}_${config.githubRepo}`;
       
-      document.querySelectorAll('.filter-btn[data-letter]').forEach(btn => {
-        const letter = btn.dataset.letter;
-        if (letter === 'all') return;
-        
-        if (existingLetters.has(letter)) {
-          btn.disabled = false;
-          btn.classList.remove('opacity-50');
-        } else {
-          btn.disabled = true;
-          btn.classList.add('opacity-50');
-        }
-      });
-    }
-
-    function renderCards(cards) {
-      const container = document.getElementById('qsl-container');
+      // 检查缓存
+      const cachedData = localStorage.getItem(cacheKey);
+      const cachedTime = localStorage.getItem(cacheTimeKey);
+      const now = new Date().getTime();
       
-      if (cards.length === 0) {
-        container.innerHTML = `
-          <div class="col-span-full text-center py-16 text-gray-500">
-            <i class="fa fa-inbox text-5xl mb-4"></i>
-            <p>当前页无QSL卡</p>
-          </div>
-        `;
+      if (cachedData && cachedTime && (now - cachedTime) < (config.dxccCacheExpireMinutes * 60 * 1000)) {
+        dxccStats = JSON.parse(cachedData);
+        renderDXCCStats();
         return;
       }
+      
+      // 提取所有唯一呼号
+      const uniqueCallsigns = [...new Set(allQslCards.map(card => getPureCallsign(card.name)))];
+      
+      // 批量查询DXCC
+      const stats = {};
+      let completed = 0;
+      
+      // 显示加载中
+      document.getElementById('dxcc-stats').innerHTML = '<div class="text-sm text-gray-500">统计中...</div>';
+      
+      if (uniqueCallsigns.length === 0) {
+        dxccStats = {};
+        renderDXCCStats();
+        return;
+      }
+      
+      uniqueCallsigns.forEach(callsign => {
+        fetch(`https://www.hamqth.com/json.php?callsign=${callsign}`)
+          .then(response => response.json())
+          .then(data => {
+            completed++;
+            if (data && data.results && data.results.dxcc) {
+              const dxcc = data.results.dxcc;
+              stats[dxcc] = (stats[dxcc] || 0) + 1;
+            }
+            
+            // 所有查询完成
+            if (completed === uniqueCallsigns.length) {
+              dxccStats = stats;
+              // 保存缓存
+              localStorage.setItem(cacheKey, JSON.stringify(stats));
+              localStorage.setItem(cacheTimeKey, now.toString());
+              renderDXCCStats();
+            }
+          })
+          .catch(error => {
+            console.error(`查询${callsign}的DXCC失败:`, error);
+            completed++;
+            if (completed === uniqueCallsigns.length) {
+              dxccStats = stats;
+              localStorage.setItem(cacheKey, JSON.stringify(stats));
+              localStorage.setItem(cacheTimeKey, now.toString());
+              renderDXCCStats();
+            }
+          });
+      });
+    }
 
-      container.innerHTML = cards.map(card => `
-        <div class="bg-white rounded-lg shadow p-2 card-hover flex flex-col h-full">
-          <div class="image-container mb-2 flex-grow" onclick="showImageModal('${card.url}', '${card.callsign}')">
-            <img src="${card.url}" alt="${card.callsign}" 
-                 onerror="this.parentElement.innerHTML = '<div class=\'error-overlay\'><i class=\'fa fa-exclamation-circle text-3xl mb-2\'></i><p>图片加载失败</p></div>'">
-          </div>
-          <div class="text-center p-2">
-            <h3 class="font-bold truncate">${card.callsign}</h3>
-            <button onclick="showImageModal('${card.url}', '${card.callsign}')" class="text-xs text-primary hover:underline mt-1 inline-block">
-              查看大图 <i class="fa fa-search-plus"></i>
-            </button>
-          </div>
-        </div>
-      `).join('');
+    // 渲染DXCC统计
+    function renderDXCCStats() {
+      const container = document.getElementById('dxcc-stats');
+      container.innerHTML = '';
+      
+      if (Object.keys(dxccStats).length === 0) {
+        container.innerHTML = '<div class="text-sm text-gray-500">暂无数据</div>';
+        return;
+      }
+      
+      // 按数量降序排序
+      const sortedDXCC = Object.entries(dxccStats).sort((a, b) => b[1] - a[1]);
+      
+      // 渲染标签
+      sortedDXCC.forEach(([dxcc, count]) => {
+        const badge = document.createElement('div');
+        badge.className = 'dxcc-badge';
+        badge.textContent = `${dxcc} (${count})`;
+        container.appendChild(badge);
+      });
     }
   </script>
 </body>
