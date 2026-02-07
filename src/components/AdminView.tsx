@@ -1,7 +1,7 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Toaster, toast } from 'sonner'
-import { ArrowLeft, ArrowUp, ArrowDown, CheckCircle, XCircle, Loader2, Github, X, Plus, ImageIcon, ScanText, Sparkles, Trash2 } from 'lucide-react'
+import { ArrowLeft, ArrowUp, ArrowDown, CheckCircle, XCircle, Loader2, Github, X, Plus, ImageIcon, Sparkles, Trash2 } from 'lucide-react'
 import { AppMode } from '../types'
 import { useOCR } from '../hooks/useOCR'
 
@@ -32,15 +32,13 @@ export const AdminView: React.FC<AdminViewProps> = ({ onModeChange }) => {
   const [deleteMode, setDeleteMode] = useState(localStorage.getItem('delete_mode') === 'true')
   const [items, setItems] = useState<QSLUploadItem[]>([])
   const [isUploading, setIsUploading] = useState(false)
-  const [isOCRDragging, setIsOCRDragging] = useState(false)
   const frontInputRef = useRef<HTMLInputElement>(null)
   const backInputRef = useRef<HTMLInputElement>(null)
-  const ocrInputRef = useRef<HTMLInputElement>(null)
   const [activeItemId, setActiveItemId] = useState<string | null>(null)
   const [uploadType, setUploadType] = useState<'front' | 'back'>('front')
   const [dragOverItem, setDragOverItem] = useState<{ itemId: string; side: 'front' | 'back' } | null>(null)
 
-  const { recognizeCard, isLoading: isOCRLoading } = useOCR({
+  const { recognizeCard } = useOCR({
     apiKey: siliconflowKey
   })
 
@@ -97,80 +95,6 @@ export const AdminView: React.FC<AdminViewProps> = ({ onModeChange }) => {
     return baseName + ext
   }
 
-  const createEmptyItem = (callsign: string, type: 'normal' | '6m' | 'SAT'): QSLUploadItem => ({
-    id: Math.random().toString(36).substr(2, 9),
-    callsign,
-    type,
-    frontImage: null,
-    backImage: null,
-    frontPreview: null,
-    backPreview: null,
-    status: 'pending',
-    progress: 0
-  })
-
-  const upsertItemWithImage = (
-    callsign: string,
-    type: 'normal' | '6m' | 'SAT',
-    side: 'front' | 'back' | 'unknown',
-    image: File,
-    preview: string,
-    ocrDetectedSide?: 'front' | 'back' | 'unknown'
-  ) => {
-    setItems(prev => {
-      const existingIndex = prev.findIndex(item =>
-        item.callsign === callsign &&
-        item.type === type &&
-        item.status === 'pending'
-      )
-
-      if (existingIndex >= 0) {
-        const existing = prev[existingIndex]
-        const detected = ocrDetectedSide || side
-        
-        const updated = assignImageToSide(existing, side, image, preview, detected)
-        const next = [...prev]
-        next[existingIndex] = updated
-        return next
-      }
-
-      const newItem = createEmptyItem(callsign, type)
-      const detected = ocrDetectedSide || side
-      const newItemWithImage = assignImageToSide(newItem, side, image, preview, detected)
-      
-      return [...prev, newItemWithImage]
-    })
-  }
-
-  const assignImageToSide = (
-    item: QSLUploadItem,
-    side: 'front' | 'back' | 'unknown',
-    image: File,
-    preview: string,
-    detectedSide: 'front' | 'back' | 'unknown'
-  ): QSLUploadItem => {
-    if (side === 'front') {
-      return { ...item, frontImage: image, frontPreview: preview, ocrDetectedSide: detectedSide }
-    }
-    
-    if (side === 'back') {
-      return { ...item, backImage: image, backPreview: preview, ocrDetectedSide: detectedSide }
-    }
-    
-    const frontIsEmpty = !item.frontImage
-    const backIsEmpty = !item.backImage
-    
-    if (frontIsEmpty) {
-      return { ...item, frontImage: image, frontPreview: preview, ocrDetectedSide: 'unknown' }
-    }
-    
-    if (backIsEmpty) {
-      return { ...item, backImage: image, backPreview: preview, ocrDetectedSide: 'unknown' }
-    }
-
-    return { ...item, frontImage: image, frontPreview: preview, ocrDetectedSide: 'unknown' }
-  }
-
   const swapImages = (itemId: string) => {
     setItems(prev => prev.map(item => {
       if (item.id !== itemId) return item
@@ -206,83 +130,6 @@ export const AdminView: React.FC<AdminViewProps> = ({ onModeChange }) => {
     })
   }
 
-  const addItemWithImage = (image: File, preview: string) => {
-    const newItem = createEmptyItem('', 'normal')
-    const newItemWithImage = { ...newItem, frontImage: image, frontPreview: preview }
-    setItems(prev => [...prev, newItemWithImage])
-  }
-
-  const getTypeLabel = (type: 'normal' | '6m' | 'SAT') => {
-    switch (type) {
-      case '6m': return t('filter.6m')
-      case 'SAT': return t('filter.sat')
-      default: return t('filter.normal')
-    }
-  }
-
-  const handleOCRDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsOCRDragging(false)
-
-    if (!siliconflowKey) {
-      toast.error(t('admin.ocrConfig'))
-      return
-    }
-
-    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'))
-    if (files.length === 0) return
-
-    for (const file of files) {
-      const reader = new FileReader()
-      reader.onload = async (event) => {
-        const preview = event.target?.result as string
-        const result = await recognizeCard(file)
-
-        if (result.success && result.callsign) {
-          upsertItemWithImage(result.callsign, result.type, result.side, file, preview, result.side)
-          const sideText = result.side === 'front' ? t('admin.front') : result.side === 'back' ? t('admin.back') : '待确认'
-          const typeText = getTypeLabel(result.type)
-          toast.success(`${result.callsign} (${typeText}) - ${sideText}`)
-        } else {
-          toast.error(`${file.name}: ${t('noResults')}`)
-          addItemWithImage(file, preview)
-        }
-      }
-      reader.readAsDataURL(file)
-    }
-  }, [siliconflowKey, recognizeCard, t])
-
-  const handleOCRFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []).filter(f => f.type.startsWith('image/'))
-    if (files.length === 0) return
-
-    if (!siliconflowKey) {
-      toast.error(t('admin.ocrConfig'))
-      e.target.value = ''
-      return
-    }
-
-    for (const file of files) {
-      const reader = new FileReader()
-      reader.onload = async (event) => {
-        const preview = event.target?.result as string
-        const result = await recognizeCard(file)
-
-        if (result.success && result.callsign) {
-          upsertItemWithImage(result.callsign, result.type, result.side, file, preview, result.side)
-          const sideText = result.side === 'front' ? t('admin.front') : result.side === 'back' ? t('admin.back') : '待确认'
-          const typeText = getTypeLabel(result.type)
-          toast.success(`${result.callsign} (${typeText}) - ${sideText}`)
-        } else {
-          toast.error(`${file.name}: ${t('noResults')}`)
-          addItemWithImage(file, preview)
-        }
-      }
-      reader.readAsDataURL(file)
-    }
-    e.target.value = ''
-  }
-
   const addNewItem = () => {
     const newItem: QSLUploadItem = {
       id: Math.random().toString(36).substr(2, 9),
@@ -306,12 +153,29 @@ export const AdminView: React.FC<AdminViewProps> = ({ onModeChange }) => {
     setItems(prev => prev.filter(item => item.id !== id))
   }
 
-  const handleFileSelect = (itemId: string, type: 'front' | 'back', file: File | null) => {
+  const handleFileSelect = async (itemId: string, type: 'front' | 'back', file: File | null) => {
     if (!file) return
 
     const reader = new FileReader()
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       const preview = e.target?.result as string
+
+      if (siliconflowKey) {
+        const result = await recognizeCard(file)
+        if (result.success && result.callsign) {
+          const detectedSide = result.side === 'unknown' ? type : result.side
+          updateItem(itemId, {
+            callsign: result.callsign,
+            type: result.type,
+            ...(detectedSide === 'front'
+              ? { frontImage: file, frontPreview: preview, ocrDetectedSide: result.side }
+              : { backImage: file, backPreview: preview, ocrDetectedSide: result.side })
+          })
+          toast.success(`OCR识别: ${result.callsign} (${detectedSide === 'front' ? '正面' : '背面'})`)
+          return
+        }
+      }
+
       if (type === 'front') {
         updateItem(itemId, { frontImage: file, frontPreview: preview })
       } else {
@@ -319,6 +183,95 @@ export const AdminView: React.FC<AdminViewProps> = ({ onModeChange }) => {
       }
     }
     reader.readAsDataURL(file)
+  }
+
+  const processMultipleImagesWithOCR = async (itemId: string, files: File[]) => {
+    if (!siliconflowKey) {
+      toast.error('请先配置 SiliconFlow API Key')
+      return
+    }
+
+    const imageFiles = files.filter(f => f.type.startsWith('image/'))
+    if (imageFiles.length === 0) return
+
+    const results: Array<{
+      file: File
+      preview: string
+      callsign: string
+      type: 'normal' | '6m' | 'SAT'
+      side: 'front' | 'back' | 'unknown'
+    }> = []
+
+    for (const file of imageFiles) {
+      const preview = await new Promise<string>((resolve) => {
+        const reader = new FileReader()
+        reader.onload = (e) => resolve(e.target?.result as string)
+        reader.readAsDataURL(file)
+      })
+
+      const ocrResult = await recognizeCard(file)
+      if (ocrResult.success && ocrResult.callsign) {
+        results.push({
+          file,
+          preview,
+          callsign: ocrResult.callsign,
+          type: ocrResult.type,
+          side: ocrResult.side
+        })
+      }
+    }
+
+    if (results.length === 0) {
+      toast.error('未能识别任何图片')
+      return
+    }
+
+    const groupedByCallsign: Record<string, typeof results> = {}
+    results.forEach(result => {
+      if (!groupedByCallsign[result.callsign]) {
+        groupedByCallsign[result.callsign] = []
+      }
+      groupedByCallsign[result.callsign].push(result)
+    })
+
+    for (const [callsign, callResults] of Object.entries(groupedByCallsign)) {
+      if (callResults.length >= 2) {
+        const frontResult = callResults.find(r => r.side === 'front') || callResults[0]
+        const backResult = callResults.find(r => r.side === 'back') || callResults.find(r => r !== frontResult)
+
+        if (backResult) {
+          updateItem(itemId, {
+            callsign,
+            type: frontResult.type,
+            frontImage: frontResult.file,
+            frontPreview: frontResult.preview,
+            backImage: backResult.file,
+            backPreview: backResult.preview,
+            ocrDetectedSide: 'front'
+          })
+          toast.success(`自动配对: ${callsign} (正反面)`)
+        } else {
+          updateItem(itemId, {
+            callsign,
+            type: frontResult.type,
+            frontImage: frontResult.file,
+            frontPreview: frontResult.preview,
+            ocrDetectedSide: frontResult.side
+          })
+        }
+      } else {
+        const result = callResults[0]
+        const side = result.side === 'unknown' ? 'front' : result.side
+        updateItem(itemId, {
+          callsign: result.callsign,
+          type: result.type,
+          ...(side === 'front'
+            ? { frontImage: result.file, frontPreview: result.preview, ocrDetectedSide: result.side }
+            : { backImage: result.file, backPreview: result.preview, ocrDetectedSide: result.side })
+        })
+        toast.success(`识别: ${result.callsign} (${side === 'front' ? '正面' : '背面'})`)
+      }
+    }
   }
 
   const handleItemDragEnter = (e: React.DragEvent, itemId: string, side: 'front' | 'back') => {
@@ -346,8 +299,12 @@ export const AdminView: React.FC<AdminViewProps> = ({ onModeChange }) => {
     const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'))
     if (files.length === 0) return
 
-    const file = files[0]
-    handleFileSelect(itemId, side, file)
+    if (files.length >= 2 && siliconflowKey) {
+      processMultipleImagesWithOCR(itemId, files)
+    } else {
+      const file = files[0]
+      handleFileSelect(itemId, side, file)
+    }
   }
 
   const triggerFileInput = (itemId: string, type: 'front' | 'back') => {
@@ -361,10 +318,15 @@ export const AdminView: React.FC<AdminViewProps> = ({ onModeChange }) => {
   }
 
   const handleGlobalFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file || !activeItemId) return
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0 || !activeItemId) return
 
-    handleFileSelect(activeItemId, uploadType, file)
+    if (files.length >= 2 && siliconflowKey) {
+      processMultipleImagesWithOCR(activeItemId, files)
+    } else {
+      const file = files[0]
+      handleFileSelect(activeItemId, uploadType, file)
+    }
     e.target.value = ''
   }
 
@@ -604,58 +566,6 @@ export const AdminView: React.FC<AdminViewProps> = ({ onModeChange }) => {
           </div>
         </div>
 
-        <div
-          onDragEnter={(e) => { e.preventDefault(); setIsOCRDragging(true) }}
-          onDragLeave={(e) => { e.preventDefault(); setIsOCRDragging(false) }}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={handleOCRDrop}
-          onClick={() => ocrInputRef.current?.click()}
-          className={`relative border-3 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all duration-300 mb-6 ${
-            isOCRDragging
-              ? 'border-purple-500 bg-purple-50 scale-[1.02]'
-              : 'border-purple-300 bg-gradient-to-br from-purple-50 to-white hover:border-purple-400 hover:shadow-lg'
-          }`}
-        >
-          <input
-            ref={ocrInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={handleOCRFileSelect}
-            className="hidden"
-          />
-
-          <div className="flex flex-col items-center gap-4">
-            <div className={`w-20 h-20 rounded-full flex items-center justify-center transition-all ${
-              isOCRDragging ? 'bg-purple-500 text-white' : 'bg-purple-100 text-purple-600'
-            }`}>
-              <ScanText className="w-10 h-10" />
-            </div>
-
-            <div>
-              <h3 className="text-xl font-semibold text-gray-900">
-                {isOCRDragging ? t('admin.ocrDragHint') : t('admin.ocrDragHint')}
-              </h3>
-              <p className="text-gray-600 mt-2">
-                {t('admin.ocrDescription')}
-              </p>
-            </div>
-
-            {isOCRLoading && (
-              <div className="flex items-center gap-2 text-purple-600">
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span>{t('loading')}</span>
-              </div>
-            )}
-
-            <div className="flex items-center gap-4 text-sm text-gray-500 mt-2">
-              <span>JPG, PNG</span>
-              <span>•</span>
-              <span>{t('admin.instructions.item1')}</span>
-            </div>
-          </div>
-        </div>
-
         <div className="flex justify-center mb-6">
           <button
             onClick={addNewItem}
@@ -670,6 +580,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onModeChange }) => {
           ref={frontInputRef}
           type="file"
           accept="image/*"
+          multiple
           onChange={handleGlobalFileChange}
           className="hidden"
         />
@@ -677,6 +588,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onModeChange }) => {
           ref={backInputRef}
           type="file"
           accept="image/*"
+          multiple
           onChange={handleGlobalFileChange}
           className="hidden"
         />
@@ -904,12 +816,6 @@ export const AdminView: React.FC<AdminViewProps> = ({ onModeChange }) => {
             <ImageIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-600 mb-4">{t('admin.noCardsAdded')}</p>
             <div className="flex gap-4 justify-center">
-              <button
-                onClick={() => ocrInputRef.current?.click()}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-              >
-                {t('admin.ocrAuto')}
-              </button>
               <button
                 onClick={addNewItem}
                 className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
