@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { RefreshCw, Calendar } from 'lucide-react'
+import { RefreshCw, Calendar, AlertTriangle } from 'lucide-react'
+import { Toaster, toast } from 'sonner'
 import { MasonryLayout } from './MasonryLayout'
 import { ImageModal } from './ImageModal'
 import { FilterBar } from './FilterBar'
@@ -30,6 +31,16 @@ export const DisplayView: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [showProxyMenu, setShowProxyMenu] = useState(false)
   const [columnCount, setColumnCount] = useState(2)
+  const [deleteMode, setDeleteMode] = useState(false)
+
+  useEffect(() => {
+    const checkDeleteMode = () => {
+      setDeleteMode(localStorage.getItem('delete_mode') === 'true')
+    }
+    checkDeleteMode()
+    const interval = setInterval(checkDeleteMode, 1000)
+    return () => clearInterval(interval)
+  }, [])
 
   useEffect(() => {
     const getColumnCount = (width: number, mode: ViewMode) => {
@@ -71,8 +82,93 @@ export const DisplayView: React.FC = () => {
   }, [cards, filter, letterFilter, searchQuery])
 
   const handleCardClick = (card: QSLCard) => {
+    if (deleteMode) {
+      handleDeleteCard(card)
+      return
+    }
     setSelectedCard(card)
     setIsModalOpen(true)
+  }
+
+  const handleDeleteCard = async (card: QSLCard) => {
+    const token = localStorage.getItem('github_token')
+    if (!token) {
+      toast.error('请先配置 GitHub Token')
+      return
+    }
+
+    if (!confirm(`确定要删除 ${card.callsign} 的卡片吗？此操作不可恢复。`)) {
+      return
+    }
+
+    try {
+      const config = {
+        owner: 'BD7PRC',
+        repo: 'BD7PRC.github.io',
+        path: 'qsl',
+        branch: 'main'
+      }
+
+      const frontFileName = card.frontImage.split('/').pop()
+      if (frontFileName) {
+        await deleteFromGitHub(token, config, frontFileName)
+      }
+
+      if (card.backImage) {
+        const backFileName = card.backImage.split('/').pop()
+        if (backFileName) {
+          await deleteFromGitHub(token, config, backFileName)
+        }
+      }
+
+      toast.success(`${card.callsign} 已删除`)
+      refresh()
+    } catch (error) {
+      toast.error(`删除失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  const deleteFromGitHub = async (
+    token: string,
+    config: { owner: string; repo: string; path: string; branch: string },
+    fileName: string
+  ) => {
+    const apiUrl = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${config.path}/${fileName}`
+
+    const getResponse = await fetch(apiUrl + `?ref=${config.branch}`, {
+      headers: {
+        Authorization: `token ${token}`,
+        Accept: 'application/vnd.github.v3+json'
+      }
+    })
+
+    if (!getResponse.ok) {
+      if (getResponse.status === 404) {
+        return
+      }
+      throw new Error(`获取文件信息失败: ${getResponse.status}`)
+    }
+
+    const fileData = await getResponse.json()
+    const sha = fileData.sha
+
+    const deleteResponse = await fetch(apiUrl, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `token ${token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/vnd.github.v3+json'
+      },
+      body: JSON.stringify({
+        message: `Delete ${fileName}`,
+        sha: sha,
+        branch: config.branch
+      })
+    })
+
+    if (!deleteResponse.ok) {
+      throw new Error(`删除失败: ${deleteResponse.status}`)
+    }
   }
 
   const handleCloseModal = () => {
@@ -86,6 +182,14 @@ export const DisplayView: React.FC = () => {
 
   return (
     <div className="min-h-dvh bg-gray-50">
+      {deleteMode && (
+        <div className="bg-red-600 text-white py-2 px-4 text-center">
+          <div className="flex items-center justify-center gap-2">
+            <AlertTriangle className="w-5 h-5" />
+            <span className="font-medium">删除模式已开启 - 点击卡片即可删除</span>
+          </div>
+        </div>
+      )}
       <header className="bg-primary text-white py-4 sm:py-6 shadow-lg">
         <div className="container mx-auto px-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -207,6 +311,7 @@ export const DisplayView: React.FC = () => {
             cards={filteredCards}
             onCardClick={handleCardClick}
             columnCount={columnCount}
+            deleteMode={deleteMode}
           />
         )}
       </main>
@@ -229,6 +334,8 @@ export const DisplayView: React.FC = () => {
         hasPrev={currentCardIndex > 0}
         hasNext={currentCardIndex < filteredCards.length - 1}
       />
+
+      <Toaster position="top-center" richColors />
     </div>
   )
 }

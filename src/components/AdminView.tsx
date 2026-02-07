@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Toaster, toast } from 'sonner'
-import { ArrowLeft, CheckCircle, XCircle, Loader2, Github, X, Plus, ImageIcon, ScanText, Sparkles } from 'lucide-react'
+import { ArrowLeft, CheckCircle, XCircle, Loader2, Github, X, Plus, ImageIcon, ScanText, Sparkles, Trash2 } from 'lucide-react'
 import { AppMode } from '../types'
 import { useOCR } from '../hooks/useOCR'
 
@@ -28,6 +28,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onModeChange }) => {
   const [showTokenInput, setShowTokenInput] = useState(!localStorage.getItem('github_token'))
   const [siliconflowKey, setSiliconflowKey] = useState(localStorage.getItem('siliconflow_key') || '')
   const [showKeyInput, setShowKeyInput] = useState(!localStorage.getItem('siliconflow_key'))
+  const [deleteMode, setDeleteMode] = useState(localStorage.getItem('delete_mode') === 'true')
   const [items, setItems] = useState<QSLUploadItem[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [isOCRDragging, setIsOCRDragging] = useState(false)
@@ -77,6 +78,13 @@ export const AdminView: React.FC<AdminViewProps> = ({ onModeChange }) => {
     setSiliconflowKey('')
     setShowKeyInput(true)
     toast.success('SiliconFlow API Key cleared')
+  }
+
+  const toggleDeleteMode = () => {
+    const newMode = !deleteMode
+    setDeleteMode(newMode)
+    localStorage.setItem('delete_mode', String(newMode))
+    toast.success(newMode ? '删除模式已开启' : '删除模式已关闭')
   }
 
   const generateFileName = (callsign: string, type: 'normal' | '6m' | 'SAT', isBack: boolean) => {
@@ -498,6 +506,35 @@ export const AdminView: React.FC<AdminViewProps> = ({ onModeChange }) => {
                 </button>
               </div>
             )}
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm p-6 border-2 border-red-100">
+            <div className="flex items-center gap-3 mb-4">
+              <Trash2 className="w-6 h-6 text-red-600" />
+              <h2 className="text-lg font-semibold">删除模式</h2>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className={`w-3 h-3 rounded-full ${deleteMode ? 'bg-red-500 animate-pulse' : 'bg-gray-300'}`}></span>
+                <span className={`font-medium ${deleteMode ? 'text-red-600' : 'text-gray-600'}`}>
+                  {deleteMode ? '已开启' : '已关闭'}
+                </span>
+              </div>
+              <button
+                onClick={toggleDeleteMode}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  deleteMode
+                    ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {deleteMode ? '关闭删除模式' : '开启删除模式'}
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mt-3">
+              开启后，在首页点击卡片即可删除（需要 GitHub Token）
+            </p>
           </div>
         </div>
 

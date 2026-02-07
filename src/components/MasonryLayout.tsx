@@ -1,5 +1,6 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
+import { Trash2 } from 'lucide-react'
 import { QSLCard } from '../types'
 import { ProgressiveImage } from './ProgressiveImage'
 
@@ -7,12 +8,14 @@ interface MasonryLayoutProps {
   cards: QSLCard[]
   onCardClick: (card: QSLCard) => void
   columnCount?: number
+  deleteMode?: boolean
 }
 
 export const MasonryLayout: React.FC<MasonryLayoutProps> = ({
   cards,
   onCardClick,
-  columnCount = 4
+  columnCount = 4,
+  deleteMode = false
 }) => {
   const { t } = useTranslation()
 
@@ -52,7 +55,9 @@ export const MasonryLayout: React.FC<MasonryLayoutProps> = ({
             return (
               <div
                 key={card.id}
-                className="group relative overflow-hidden rounded-xl bg-white shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer animate-slide-up"
+                className={`group relative overflow-hidden rounded-xl bg-white shadow-md transition-all duration-300 cursor-pointer animate-slide-up ${
+                  deleteMode ? 'hover:shadow-red-500/50 hover:ring-2 hover:ring-red-500' : 'hover:shadow-xl'
+                }`}
                 style={{ animationDelay: `${index * 50}ms` }}
                 onClick={() => onCardClick(card)}
               >
@@ -62,11 +67,20 @@ export const MasonryLayout: React.FC<MasonryLayoutProps> = ({
                   aspectRatio={card.aspectRatio || 1}
                   className="w-full"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                <div className={`absolute inset-0 bg-gradient-to-t via-transparent to-transparent transition-opacity duration-300 ${
+                  deleteMode ? 'from-red-900/60 opacity-100' : 'from-black/60 opacity-0 group-hover:opacity-100'
+                }`} />
+                {deleteMode && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="bg-red-600 text-white p-4 rounded-full shadow-lg">
+                      <Trash2 className="w-8 h-8" />
+                    </div>
+                  </div>
+                )}
 
                 <div className="p-3">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-gray-900 text-lg">{card.callsign}</h3>
+                    <h3 className={`font-semibold text-lg ${deleteMode ? 'text-red-600' : 'text-gray-900'}`}>{card.callsign}</h3>
                     <span className={`text-xs px-2 py-1 rounded-full ${typeInfo.className}`}>
                       {typeInfo.text}
                     </span>
