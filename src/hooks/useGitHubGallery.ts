@@ -47,18 +47,23 @@ export function useGitHubGallery(config: GitHubConfig = DEFAULT_CONFIG) {
   }, [currentProxy])
 
   const parseFileName = useCallback((fileName: string) => {
-    const baseName = fileName.replace(/\.(jpg|jpeg|png)$/i, '')
-    const isBack = baseName.toLowerCase().endsWith('_b')
-    let callsign = isBack ? baseName.slice(0, -2) : baseName
-
-    let type: QSLCard['type'] = 'normal'
-    if (callsign.toLowerCase().endsWith('_6m')) {
-      type = '6m'
-      callsign = callsign.slice(0, -3)
-    } else if (callsign.toLowerCase().endsWith('_sat')) {
-      type = 'SAT'
-      callsign = callsign.slice(0, -4)
+    let baseName = fileName.replace(/\.(jpg|jpeg|png)$/i, '').toLowerCase()
+    
+    const isBack = baseName.endsWith('_b')
+    if (isBack) {
+      baseName = baseName.slice(0, -2)
     }
+    
+    let type: QSLCard['type'] = 'normal'
+    if (baseName.endsWith('_6m')) {
+      type = '6m'
+      baseName = baseName.slice(0, -3)
+    } else if (baseName.endsWith('_sat')) {
+      type = 'SAT'
+      baseName = baseName.slice(0, -4)
+    }
+    
+    const callsign = baseName.toUpperCase()
 
     return { callsign, type, isBack }
   }, [])
