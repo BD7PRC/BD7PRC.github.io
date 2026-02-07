@@ -1,6 +1,7 @@
 export interface QSLCard {
   id: string
   callsign: string
+  displayCallsign: string
   frontImage: string
   backImage?: string
   type: 'normal' | '6m' | 'SAT'
@@ -11,6 +12,7 @@ export interface QSLCard {
   aspectRatio?: number
   cardIndex: number
   totalCards?: number
+  portablePrefix?: string
 }
 
 export interface GitHubFile {

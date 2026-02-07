@@ -43,9 +43,11 @@ export function useUploader(options: UseUploaderOptions = {}) {
         ? 'SAT'
         : 'normal'
 
+      const finalCallsign = callsign.replace(/_6m$|_sat$/i, '')
       const card: QSLCard = {
         id: uploadId,
-        callsign: callsign.replace(/_6m$|_sat$/i, ''),
+        callsign: finalCallsign,
+        displayCallsign: finalCallsign,
         frontImage: compressed.dataUrl,
         type,
         createdAt: Date.now(),

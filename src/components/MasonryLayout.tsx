@@ -141,10 +141,10 @@ export const MasonryLayout: React.FC<MasonryLayoutProps> = ({
                   )}
                 </div>
 
-                <div className="p-3 min-h-[80px]">
+                  <div className="p-3 min-h-[80px]">
                   <div className="flex items-center justify-between">
                     <h3 className={`font-semibold text-lg ${deleteMode ? 'text-red-600' : 'text-gray-900'}`}>
-                      {group.callsign}
+                      {displayCard.displayCallsign}
                       {group.totalCount > 1 && (
                         <span className="text-sm text-blue-600 ml-1">
                           ({(selectedIndex[group.key] || 0) + 1}/{group.totalCount})

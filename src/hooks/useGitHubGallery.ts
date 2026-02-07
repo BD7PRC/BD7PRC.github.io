@@ -48,12 +48,12 @@ export function useGitHubGallery(config: GitHubConfig = DEFAULT_CONFIG) {
 
   const parseFileName = useCallback((fileName: string) => {
     let baseName = fileName.replace(/\.(jpg|jpeg|png)$/i, '').toLowerCase()
-    
+
     const isBack = baseName.endsWith('_b')
     if (isBack) {
       baseName = baseName.slice(0, -2)
     }
-    
+
     let type: QSLCard['type'] = 'normal'
     if (baseName.endsWith('_6m')) {
       type = '6m'
@@ -62,24 +62,30 @@ export function useGitHubGallery(config: GitHubConfig = DEFAULT_CONFIG) {
       type = 'SAT'
       baseName = baseName.slice(0, -4)
     }
-    
+
     let cardIndex = 1
     const newIndexMatch = baseName.match(/_#(\d+)$/)
-    const legacyIndexMatch = baseName.match(/_(\d+)$/)
-    
     if (newIndexMatch) {
       cardIndex = parseInt(newIndexMatch[1], 10)
       baseName = baseName.slice(0, -(newIndexMatch[0].length))
-    } else if (legacyIndexMatch) {
-      cardIndex = parseInt(legacyIndexMatch[1], 10)
-      baseName = baseName.slice(0, -(legacyIndexMatch[0].length))
     }
-    
-    baseName = baseName.replace(/_[0-9]+$/, '').replace(/_[pm]$/i, '').replace(/_mm$/i, '')
-    
-    const callsign = baseName.toUpperCase()
 
-    return { callsign, type, isBack, cardIndex }
+    let portablePrefix: string | undefined
+    const portableMatch = baseName.match(/_(\d+)$/)
+    if (portableMatch) {
+      const num = parseInt(portableMatch[1], 10)
+      if (num >= 0 && num <= 9) {
+        portablePrefix = String(num)
+        baseName = baseName.slice(0, -(portableMatch[0].length))
+      }
+    }
+
+    baseName = baseName.replace(/_[pm]$/i, '').replace(/_mm$/i, '')
+
+    const callsign = baseName.toUpperCase()
+    const displayCallsign = portablePrefix ? `${callsign}/${portablePrefix}` : callsign
+
+    return { callsign, type, isBack, cardIndex, displayCallsign, portablePrefix }
   }, [])
 
   const loadCards = useCallback(async () => {
@@ -139,7 +145,7 @@ export function useGitHubGallery(config: GitHubConfig = DEFAULT_CONFIG) {
       })
 
       const cardPromises = parsedFiles.map(async (item) => {
-        const { file, callsign, type, cardIndex } = item
+        const { file, callsign, displayCallsign, type, cardIndex, portablePrefix } = item
         const baseName = file.name.replace(/\.(jpg|jpeg|png)$/i, '')
         const groupKey = `${callsign}_${type}`
         const group = callsignGroups.get(groupKey)!
@@ -155,6 +161,7 @@ export function useGitHubGallery(config: GitHubConfig = DEFAULT_CONFIG) {
         const card: QSLCard = {
           id: file.sha,
           callsign,
+          displayCallsign,
           frontImage: imageUrl,
           backImage: backFile ? buildProxyUrl(backFile.download_url) : undefined,
           type,
@@ -163,7 +170,8 @@ export function useGitHubGallery(config: GitHubConfig = DEFAULT_CONFIG) {
           height: dimensions.height,
           aspectRatio: dimensions.aspectRatio,
           cardIndex,
-          totalCards
+          totalCards,
+          portablePrefix
         }
 
         return card

@@ -9,8 +9,12 @@
  * Usage: node rename-migrate.js [--dry-run]
  */
 
-const fs = require('fs')
-const path = require('path')
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 const QSL_DIR = path.join(__dirname, 'qsl')
 
@@ -33,14 +37,20 @@ function parseOldFileName(fileName) {
   }
   
   // Check for legacy index format (_2, _3, etc.)
+  // Only treat 2-5 as card indices, 0,1,6-9 are likely portable operation prefixes
   const indexMatch = baseName.match(/_(\d+)$/)
   if (indexMatch) {
     const index = parseInt(indexMatch[1], 10)
-    baseName = baseName.slice(0, -(indexMatch[0].length))
     
-    // Reconstruct with new format
-    const newBase = baseName.toUpperCase() + `_#${index}` + type + (isBack ? '_B' : '')
-    return newBase + ext.toLowerCase()
+    // Small numbers (2-5) are treated as card indices
+    // Single digits 0,1,6,7,8,9 are treated as portable operation suffixes
+    if (index >= 2 && index <= 5) {
+      baseName = baseName.slice(0, -(indexMatch[0].length))
+      
+      // Reconstruct with new format
+      const newBase = baseName.toUpperCase() + `_#${index}` + type + (isBack ? '_B' : '')
+      return newBase + ext.toLowerCase()
+    }
   }
   
   return null // No migration needed
