@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Toaster, toast } from 'sonner'
-import { ArrowLeft, CheckCircle, XCircle, Loader2, Github, X, Plus, ImageIcon, ScanText, Sparkles, Trash2 } from 'lucide-react'
+import { ArrowLeft, ArrowUp, ArrowDown, CheckCircle, XCircle, Loader2, Github, X, Plus, ImageIcon, ScanText, Sparkles, Trash2 } from 'lucide-react'
 import { AppMode } from '../types'
 import { useOCR } from '../hooks/useOCR'
 
@@ -16,6 +16,7 @@ interface QSLUploadItem {
   status: 'pending' | 'uploading' | 'completed' | 'error'
   progress: number
   error?: string
+  ocrDetectedSide?: 'front' | 'back' | 'unknown'
 }
 
 interface AdminViewProps {
@@ -111,9 +112,10 @@ export const AdminView: React.FC<AdminViewProps> = ({ onModeChange }) => {
   const upsertItemWithImage = (
     callsign: string,
     type: 'normal' | '6m' | 'SAT',
-    side: 'front' | 'back',
+    side: 'front' | 'back' | 'unknown',
     image: File,
-    preview: string
+    preview: string,
+    ocrDetectedSide?: 'front' | 'back' | 'unknown'
   ) => {
     setItems(prev => {
       const existingIndex = prev.findIndex(item =>
@@ -124,19 +126,83 @@ export const AdminView: React.FC<AdminViewProps> = ({ onModeChange }) => {
 
       if (existingIndex >= 0) {
         const existing = prev[existingIndex]
-        const updated = side === 'front'
-          ? { ...existing, frontImage: image, frontPreview: preview }
-          : { ...existing, backImage: image, backPreview: preview }
+        const detected = ocrDetectedSide || side
+        
+        const updated = assignImageToSide(existing, side, image, preview, detected)
         const next = [...prev]
         next[existingIndex] = updated
         return next
       }
 
       const newItem = createEmptyItem(callsign, type)
-      const newItemWithImage = side === 'front'
-        ? { ...newItem, frontImage: image, frontPreview: preview }
-        : { ...newItem, backImage: image, backPreview: preview }
+      const detected = ocrDetectedSide || side
+      const newItemWithImage = assignImageToSide(newItem, side, image, preview, detected)
+      
       return [...prev, newItemWithImage]
+    })
+  }
+
+  const assignImageToSide = (
+    item: QSLUploadItem,
+    side: 'front' | 'back' | 'unknown',
+    image: File,
+    preview: string,
+    detectedSide: 'front' | 'back' | 'unknown'
+  ): QSLUploadItem => {
+    if (side === 'front') {
+      return { ...item, frontImage: image, frontPreview: preview, ocrDetectedSide: detectedSide }
+    }
+    
+    if (side === 'back') {
+      return { ...item, backImage: image, backPreview: preview, ocrDetectedSide: detectedSide }
+    }
+    
+    const frontIsEmpty = !item.frontImage
+    const backIsEmpty = !item.backImage
+    
+    if (frontIsEmpty) {
+      return { ...item, frontImage: image, frontPreview: preview, ocrDetectedSide: 'unknown' }
+    }
+    
+    if (backIsEmpty) {
+      return { ...item, backImage: image, backPreview: preview, ocrDetectedSide: 'unknown' }
+    }
+
+    return { ...item, frontImage: image, frontPreview: preview, ocrDetectedSide: 'unknown' }
+  }
+
+  const swapImages = (itemId: string) => {
+    setItems(prev => prev.map(item => {
+      if (item.id !== itemId) return item
+      return {
+        ...item,
+        frontImage: item.backImage,
+        frontPreview: item.backPreview,
+        backImage: item.frontImage,
+        backPreview: item.frontPreview,
+        ocrDetectedSide: 'front'
+      }
+    }))
+    toast.success('已交换正反面')
+  }
+
+  const moveItem = (itemId: string, direction: 'up' | 'down') => {
+    setItems(prev => {
+      const index = prev.findIndex(item => item.id === itemId)
+      if (index === -1) return prev
+
+      const newItems = [...prev]
+      const item = newItems[index]
+
+      if (direction === 'up' && index > 0) {
+        newItems[index] = newItems[index - 1]
+        newItems[index - 1] = item
+      } else if (direction === 'down' && index < newItems.length - 1) {
+        newItems[index] = newItems[index + 1]
+        newItems[index + 1] = item
+      }
+
+      return newItems
     })
   }
 
@@ -173,8 +239,8 @@ export const AdminView: React.FC<AdminViewProps> = ({ onModeChange }) => {
         const result = await recognizeCard(file)
 
         if (result.success && result.callsign) {
-          upsertItemWithImage(result.callsign, result.type, result.side, file, preview)
-          const sideText = result.side === 'front' ? t('admin.front') : t('admin.back')
+          upsertItemWithImage(result.callsign, result.type, result.side, file, preview, result.side)
+          const sideText = result.side === 'front' ? t('admin.front') : result.side === 'back' ? t('admin.back') : '待确认'
           const typeText = getTypeLabel(result.type)
           toast.success(`${result.callsign} (${typeText}) - ${sideText}`)
         } else {
@@ -203,8 +269,8 @@ export const AdminView: React.FC<AdminViewProps> = ({ onModeChange }) => {
         const result = await recognizeCard(file)
 
         if (result.success && result.callsign) {
-          upsertItemWithImage(result.callsign, result.type, result.side, file, preview)
-          const sideText = result.side === 'front' ? t('admin.front') : t('admin.back')
+          upsertItemWithImage(result.callsign, result.type, result.side, file, preview, result.side)
+          const sideText = result.side === 'front' ? t('admin.front') : result.side === 'back' ? t('admin.back') : '待确认'
           const typeText = getTypeLabel(result.type)
           toast.success(`${result.callsign} (${typeText}) - ${sideText}`)
         } else {
@@ -770,6 +836,23 @@ export const AdminView: React.FC<AdminViewProps> = ({ onModeChange }) => {
                         </div>
                       </div>
 
+                      {item.ocrDetectedSide === 'unknown' && (
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                          <p className="text-sm text-yellow-700 mb-2">OCR未能确定正反面，请手动调整</p>
+                          <div className="flex gap-2">
+                            {item.frontPreview && item.backPreview && (
+                              <button
+                                onClick={() => swapImages(item.id)}
+                                disabled={item.status !== 'pending'}
+                                className="px-3 py-1.5 text-sm bg-yellow-100 hover:bg-yellow-200 text-yellow-800 rounded-lg transition-colors disabled:opacity-50"
+                              >
+                                交换正反面
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
                       {item.error && (
                         <p className="text-sm text-red-600">{item.error}</p>
                       )}
@@ -785,12 +868,29 @@ export const AdminView: React.FC<AdminViewProps> = ({ onModeChange }) => {
                     </div>
 
                     {item.status === 'pending' && (
-                      <button
-                        onClick={() => removeItem(item.id)}
-                        className="p-2 text-gray-400 hover:text-red-500 transition-colors"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
+                      <div className="flex flex-col gap-1">
+                        <button
+                          onClick={() => moveItem(item.id, 'up')}
+                          className="p-1.5 text-gray-400 hover:text-blue-500 transition-colors"
+                          aria-label="Move up"
+                        >
+                          <ArrowUp className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => moveItem(item.id, 'down')}
+                          className="p-1.5 text-gray-400 hover:text-blue-500 transition-colors"
+                          aria-label="Move down"
+                        >
+                          <ArrowDown className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => removeItem(item.id)}
+                          className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
+                          aria-label="Remove"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>

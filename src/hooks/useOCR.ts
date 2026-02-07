@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 export interface OCRResult {
   callsign: string
   type: 'normal' | '6m' | 'SAT'
-  side: 'front' | 'back'
+  side: 'front' | 'back' | 'unknown'
   success: boolean
   error?: string
 }
@@ -19,7 +19,7 @@ export function useOCR(options: UseOCROptions) {
 
   const recognizeCard = useCallback(async (imageFile: File): Promise<OCRResult> => {
     if (!apiKey) {
-      return { callsign: '', type: 'normal', side: 'front', success: false, error: '请先配置 API Key' }
+      return { callsign: '', type: 'normal', side: 'unknown', success: false, error: '请先配置 API Key' }
     }
 
     setIsLoading(true)
@@ -36,23 +36,31 @@ export function useOCR(options: UseOCROptions) {
         reader.readAsDataURL(imageFile)
       })
 
-      const promptText = `分析这张QSL卡片图片，提取以下信息并以JSON格式返回：
+      const promptText = `Analyze this QSL card image and extract information.
+
+QSL Card Structure:
+- FRONT side: Usually contains photos, scenic views, emblems, badges, the callsign in large font, or decorative patterns. Visually rich with images.
+- BACK side: Usually contains text, tables (QSO/contact records), form fields, RST reports, date/time fields, frequency/band information. More text-heavy with structured layout.
+
+Task: Identify and return ONLY a JSON object:
 {
-  "callsign": "识别的业余无线电呼号（如BA7MJC、BD7PRC）",
-  "type": "卡片类型：如果是6米波段卡片返回'6m'，如果是卫星通信卡片返回'SAT'，否则返回'normal'",
-  "side": "卡片正反面：如果图片包含表格、通信记录、大量文字内容返回'back'（背面），如果是图片、徽章、图案为主返回'front'（正面）"
+  "callsign": "The amateur radio callsign (e.g., BA7MJC, BD7PRC, K1ABC)",
+  "type": "Card type: '6m' if 6-meter band indicators found, 'SAT' if satellite communication indicators found, otherwise 'normal'",
+  "side": "Card side: 'front' if image/photo/badge dominated, 'back' if table/QSO records/form fields/text-heavy, 'unknown' if cannot determine"
 }
 
-判断正反面依据：
-- 正面(front)：通常是图片、风景照、徽章、呼号大字体展示，没有表格
-- 背面(back)：通常是文字面，有表格（如通信记录表格）、填写区域、大量文字信息
+Key Indicators:
+- 6m band: Look for "6m", "50MHz", "50 MHz", "Six Meters", "50.0"
+- Satellite: Look for "SAT", "Satellite", "OSCAR", "ISS", "XW", "线性", "卫星"
+- Front indicators: Large photos, landscapes, club badges, decorative designs, minimal text tables
+- Back indicators: QSO tables, RST fields, Date/Time columns, Mode/Band listings, handwritten contact info
 
-注意：
-1. 呼号通常是字母+数字+字母的组合，如XX1XXX格式；如果出现多个呼号，返回最显著/最大的那个
-2. 6米波段卡片通常有"6m"、"50MHz"、"Six Meters"等字样
-3. 卫星通信卡片通常有"SAT"、"Satellite"、"卫星"、"OSCAR"等字样
-4. callsign 输出请统一大写，不要包含多余文字
-5. 只返回JSON，不要其他解释`
+Rules:
+1. Callsign format: [A-Z]{1,3}[0-9][A-Z]{1,4} (e.g., XX1XXX). Return the most prominent/largest one.
+2. If multiple callsigns exist, return the station's own callsign (usually largest/most central).
+3. Output callsign in UPPERCASE only.
+4. If side is ambiguous or uncertain, return "unknown" instead of guessing.
+5. Return ONLY the JSON object, no other text.`
 
       const response = await fetch('https://api.siliconflow.cn/v1/chat/completions', {
         method: 'POST',
@@ -117,7 +125,7 @@ export function useOCR(options: UseOCROptions) {
         return {
           callsign: '',
           type: 'normal',
-          side: 'front',
+          side: 'unknown',
           success: false,
           error: '未识别到呼号'
         }
@@ -129,7 +137,7 @@ export function useOCR(options: UseOCROptions) {
       return {
         callsign: '',
         type: 'normal',
-        side: 'front',
+        side: 'unknown',
         success: false,
         error: errorMessage
       }
@@ -186,17 +194,30 @@ function parseType(text: string): 'normal' | '6m' | 'SAT' {
   return 'normal'
 }
 
-function parseSide(text: string): 'front' | 'back' {
+function parseSide(text: string): 'front' | 'back' | 'unknown' {
   const lowerText = text.toLowerCase()
-  const backHints = ['qso', 'rst', 'date', 'time', 'utc', 'band', 'mhz', 'mode', 'report', 'signal', 'name', 'qth']
-
+  
+  if (lowerText.includes('unknown') || lowerText.includes('不确定')) {
+    return 'unknown'
+  }
+  
   if (lowerText.includes('back') || lowerText.includes('背面')) {
     return 'back'
   }
 
-  if (backHints.some(hint => lowerText.includes(hint))) {
+  const backHints = ['qso', 'rst', 'date', 'time', 'utc', 'band', 'mhz', 'mode', 'report', 'signal', 'name', 'qth', 'table', 'contact', 'frequency']
+  const frontHints = ['photo', 'image', 'picture', 'badge', 'emblem', 'logo', 'scenic', 'landscape']
+  
+  const hasBackIndicator = backHints.some(hint => lowerText.includes(hint))
+  const hasFrontIndicator = frontHints.some(hint => lowerText.includes(hint))
+  
+  if (hasBackIndicator && !hasFrontIndicator) {
     return 'back'
   }
-   
-  return 'front'
+  
+  if (hasFrontIndicator && !hasBackIndicator) {
+    return 'front'
+  }
+    
+  return 'unknown'
 }
