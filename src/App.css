@@ -1,7 +1,0 @@
-.card-hover {
-  @apply transition-all duration-300;
-}
-
-.card-hover:hover {
-  @apply shadow-xl -translate-y-1;
-}
