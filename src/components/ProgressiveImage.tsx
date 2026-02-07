@@ -56,19 +56,24 @@ export const ProgressiveImage: React.FC<ProgressiveImageProps> = ({
   return (
     <div
       ref={containerRef}
-      className={`relative overflow-hidden bg-gray-200 ${className}`}
+      className={`relative overflow-hidden bg-gray-100 ${className}`}
       style={{ aspectRatio }}
       onClick={onClick}
     >
       <div
-        className={`absolute inset-0 bg-gray-300 animate-pulse transition-opacity duration-500 ${
+        className={`absolute inset-0 bg-gradient-to-r from-gray-100 via-gray-200 to-gray-100 bg-[length:200%_100%] animate-[shimmer_1.5s_infinite] transition-opacity duration-500 ${
           isLoaded ? 'opacity-0' : 'opacity-100'
         }`}
+        style={{
+          backgroundSize: '200% 100%',
+          animation: isLoaded ? 'none' : 'shimmer 1.5s infinite'
+        }}
       />
 
       {!isLoaded && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-8 h-8 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+          <div className="w-12 h-12 rounded-lg bg-gray-300/80" />
+          <div className="w-20 h-3 rounded-full bg-gray-300/80" />
         </div>
       )}
 
