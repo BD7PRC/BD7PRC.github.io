@@ -21,8 +21,8 @@ interface DXCCSourcePayload {
 
 const DXCC_SOURCE_URL = 'https://raw.githubusercontent.com/k0swe/dxcc-json/main/dxcc.json'
 const DXCC_SOURCE_URLS = ['/dxcc.json', DXCC_SOURCE_URL]
-const DXCC_CACHE_KEY = 'dxcc-source-cache-v1'
-const DXCC_CACHE_VERSION = 1
+const DXCC_CACHE_KEY = 'dxcc-source-cache-v2'
+const DXCC_CACHE_VERSION = 2
 
 let inMemoryCache: DXCCEntity[] | null = null
 
@@ -68,10 +68,12 @@ const writeCachedEntities = (data: DXCCEntity[]) => {
 }
 
 export const loadDXCCEntities = async (): Promise<DXCCEntity[]> => {
-  if (inMemoryCache) return inMemoryCache
+  if (inMemoryCache && inMemoryCache.length > 0) {
+    return inMemoryCache
+  }
 
   const cached = readCachedEntities()
-  if (cached) {
+  if (cached && cached.length > 0) {
     inMemoryCache = cached
     return cached
   }
@@ -99,6 +101,11 @@ export const loadDXCCEntities = async (): Promise<DXCCEntity[]> => {
   }
 
   const data = normalizeEntities(payload)
+  
+  if (data.length === 0) {
+    throw new Error('DXCC data is empty after normalization')
+  }
+  
   inMemoryCache = data
   writeCachedEntities(data)
   return data

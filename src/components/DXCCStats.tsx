@@ -44,8 +44,12 @@ export const DXCCStats: React.FC<DXCCStatsProps> = ({ cards }) => {
     const findEntity = (callsign: string) => {
       const normalized = callsign.toUpperCase()
       for (const entity of compiledEntities) {
-        if (entity.regex.test(normalized)) {
-          return entity
+        try {
+          if (entity.regex.test(normalized)) {
+            return entity
+          }
+        } catch {
+          continue
         }
       }
       return null
@@ -53,14 +57,24 @@ export const DXCCStats: React.FC<DXCCStatsProps> = ({ cards }) => {
 
     cards.forEach(card => {
       const entity = findEntity(card.callsign)
-      const key = entity ? String(entity.entityCode) : 'unknown'
-      const prefix = entity?.prefix?.split(',')[0] || 'Unknown'
-      const name = entity?.name || 'Unknown'
+      
+      if (entity) {
+        const key = String(entity.entityCode)
+        const prefix = entity.prefix?.split(',')[0] || entity.prefix
+        const name = entity.name
 
-      if (dxccMap.has(key)) {
-        dxccMap.get(key)!.count++
+        if (dxccMap.has(key)) {
+          dxccMap.get(key)!.count++
+        } else {
+          dxccMap.set(key, { count: 1, name, prefix })
+        }
       } else {
-        dxccMap.set(key, { count: 1, name, prefix })
+        const unknownKey = 'unknown'
+        if (dxccMap.has(unknownKey)) {
+          dxccMap.get(unknownKey)!.count++
+        } else {
+          dxccMap.set(unknownKey, { count: 1, name: '未识别', prefix: '?' })
+        }
       }
     })
 
