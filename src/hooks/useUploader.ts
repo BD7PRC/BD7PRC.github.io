@@ -51,7 +51,8 @@ export function useUploader(options: UseUploaderOptions = {}) {
         createdAt: Date.now(),
         width: compressed.width,
         height: compressed.height,
-        aspectRatio
+        aspectRatio,
+        cardIndex: 1
       }
 
       setUploads(prev => 

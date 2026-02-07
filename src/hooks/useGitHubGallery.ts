@@ -63,12 +63,23 @@ export function useGitHubGallery(config: GitHubConfig = DEFAULT_CONFIG) {
       baseName = baseName.slice(0, -4)
     }
     
-    // Remove portable operation suffixes (e.g., _9, _P, _M, _MM)
+    let cardIndex = 1
+    const newIndexMatch = baseName.match(/_#(\d+)$/)
+    const legacyIndexMatch = baseName.match(/_(\d+)$/)
+    
+    if (newIndexMatch) {
+      cardIndex = parseInt(newIndexMatch[1], 10)
+      baseName = baseName.slice(0, -(newIndexMatch[0].length))
+    } else if (legacyIndexMatch) {
+      cardIndex = parseInt(legacyIndexMatch[1], 10)
+      baseName = baseName.slice(0, -(legacyIndexMatch[0].length))
+    }
+    
     baseName = baseName.replace(/_[0-9]+$/, '').replace(/_[pm]$/i, '').replace(/_mm$/i, '')
     
     const callsign = baseName.toUpperCase()
 
-    return { callsign, type, isBack }
+    return { callsign, type, isBack, cardIndex }
   }, [])
 
   const loadCards = useCallback(async () => {
@@ -109,9 +120,30 @@ export function useGitHubGallery(config: GitHubConfig = DEFAULT_CONFIG) {
         !f.name.toLowerCase().includes('_b.')
       )
 
-      const cardPromises = frontFiles.map(async (file) => {
-        const { callsign, type } = parseFileName(file.name)
+      const parsedFiles = frontFiles.map(file => {
+        const parsed = parseFileName(file.name)
+        return { file, ...parsed }
+      })
+
+      const callsignGroups = new Map<string, typeof parsedFiles>()
+      parsedFiles.forEach(item => {
+        const key = `${item.callsign}_${item.type}`
+        if (!callsignGroups.has(key)) {
+          callsignGroups.set(key, [])
+        }
+        callsignGroups.get(key)!.push(item)
+      })
+
+      callsignGroups.forEach(group => {
+        group.sort((a, b) => a.cardIndex - b.cardIndex)
+      })
+
+      const cardPromises = parsedFiles.map(async (item) => {
+        const { file, callsign, type, cardIndex } = item
         const baseName = file.name.replace(/\.(jpg|jpeg|png)$/i, '')
+        const groupKey = `${callsign}_${type}`
+        const group = callsignGroups.get(groupKey)!
+        const totalCards = group.length
 
         const backFile = imageFiles.find(f =>
           f.name.toLowerCase() === `${baseName}_b${file.name.match(/\.(jpg|jpeg|png)$/i)?.[0] || '.jpg'}`.toLowerCase()
@@ -129,7 +161,9 @@ export function useGitHubGallery(config: GitHubConfig = DEFAULT_CONFIG) {
           createdAt: new Date().getTime(),
           width: dimensions.width,
           height: dimensions.height,
-          aspectRatio: dimensions.aspectRatio
+          aspectRatio: dimensions.aspectRatio,
+          cardIndex,
+          totalCards
         }
 
         return card

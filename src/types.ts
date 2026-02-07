@@ -9,6 +9,8 @@ export interface QSLCard {
   width?: number
   height?: number
   aspectRatio?: number
+  cardIndex: number
+  totalCards?: number
 }
 
 export interface GitHubFile {
