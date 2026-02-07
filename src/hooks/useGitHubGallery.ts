@@ -8,6 +8,8 @@ const DEFAULT_CONFIG: GitHubConfig = {
   branch: 'main'
 }
 
+const CACHE_VERSION = 'v3'
+
 const getImageDimensions = (url: string): Promise<{ width: number; height: number; aspectRatio: number }> => {
   return new Promise((resolve) => {
     const img = new Image()
@@ -85,7 +87,15 @@ export function useGitHubGallery(config: GitHubConfig = DEFAULT_CONFIG) {
     const callsign = baseName.toUpperCase()
     const displayCallsign = portablePrefix ? `${callsign}/${portablePrefix}` : callsign
 
-    return { callsign, type, isBack, cardIndex, displayCallsign, portablePrefix }
+    return { 
+      callsign, 
+      type, 
+      isBack, 
+      cardIndex, 
+      displayCallsign, 
+      portablePrefix,
+      originalName: fileName
+    }
   }, [])
 
   const loadCards = useCallback(async () => {
@@ -93,7 +103,7 @@ export function useGitHubGallery(config: GitHubConfig = DEFAULT_CONFIG) {
     setError(null)
 
     try {
-      const cacheKey = `github_qsl_${config.owner}_${config.repo}`
+      const cacheKey = `github_qsl_${config.owner}_${config.repo}_${CACHE_VERSION}`
       const cacheTimeKey = `${cacheKey}_time`
       const cached = localStorage.getItem(cacheKey)
       const cachedTime = localStorage.getItem(cacheTimeKey)
@@ -122,9 +132,12 @@ export function useGitHubGallery(config: GitHubConfig = DEFAULT_CONFIG) {
         /\.(jpg|jpeg|png)$/i.test(f.name)
       )
 
-      const frontFiles = imageFiles.filter(f =>
-        !f.name.toLowerCase().includes('_b.')
-      )
+      const frontFiles = imageFiles.filter(f => {
+        const lowerName = f.name.toLowerCase()
+        const ext = lowerName.match(/\.(jpg|jpeg|png)$/)?.[0] || ''
+        const nameWithoutExt = lowerName.slice(0, -ext.length)
+        return !nameWithoutExt.endsWith('_b')
+      })
 
       const parsedFiles = frontFiles.map(file => {
         const parsed = parseFileName(file.name)
@@ -145,14 +158,16 @@ export function useGitHubGallery(config: GitHubConfig = DEFAULT_CONFIG) {
       })
 
       const cardPromises = parsedFiles.map(async (item) => {
-        const { file, callsign, displayCallsign, type, cardIndex, portablePrefix } = item
-        const baseName = file.name.replace(/\.(jpg|jpeg|png)$/i, '')
+        const { file, callsign, displayCallsign, type, cardIndex, portablePrefix, originalName } = item
+        const ext = file.name.match(/\.(jpg|jpeg|png)$/i)?.[0] || '.jpg'
+        const baseNameWithoutExt = originalName.replace(/\.(jpg|jpeg|png)$/i, '')
         const groupKey = `${callsign}_${type}`
         const group = callsignGroups.get(groupKey)!
         const totalCards = group.length
 
+        const backFileName = `${baseNameWithoutExt}_B${ext}`
         const backFile = imageFiles.find(f =>
-          f.name.toLowerCase() === `${baseName}_b${file.name.match(/\.(jpg|jpeg|png)$/i)?.[0] || '.jpg'}`.toLowerCase()
+          f.name.toLowerCase() === backFileName.toLowerCase()
         )
 
         const imageUrl = buildProxyUrl(file.download_url)
@@ -161,7 +176,7 @@ export function useGitHubGallery(config: GitHubConfig = DEFAULT_CONFIG) {
         const card: QSLCard = {
           id: file.sha,
           callsign,
-          displayCallsign,
+          displayCallsign: displayCallsign || callsign,
           frontImage: imageUrl,
           backImage: backFile ? buildProxyUrl(backFile.download_url) : undefined,
           type,
