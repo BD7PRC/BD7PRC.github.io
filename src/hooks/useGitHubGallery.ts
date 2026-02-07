@@ -63,6 +63,9 @@ export function useGitHubGallery(config: GitHubConfig = DEFAULT_CONFIG) {
       baseName = baseName.slice(0, -4)
     }
     
+    // Remove portable operation suffixes (e.g., _9, _P, _M, _MM)
+    baseName = baseName.replace(/_[0-9]+$/, '').replace(/_[pm]$/i, '').replace(/_mm$/i, '')
+    
     const callsign = baseName.toUpperCase()
 
     return { callsign, type, isBack }
