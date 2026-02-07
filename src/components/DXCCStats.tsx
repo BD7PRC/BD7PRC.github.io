@@ -10,6 +10,7 @@ interface DXCCStatsProps {
 export const DXCCStats: React.FC<DXCCStatsProps> = ({ cards }) => {
   const [entities, setEntities] = React.useState<DXCCEntity[]>([])
   const [loadError, setLoadError] = React.useState<string | null>(null)
+  const [unknownCallsigns, setUnknownCallsigns] = React.useState<string[]>([])
 
   React.useEffect(() => {
     let isActive = true
@@ -18,6 +19,7 @@ export const DXCCStats: React.FC<DXCCStatsProps> = ({ cards }) => {
       .then(data => {
         if (isActive) {
           setEntities(data)
+          console.log('DXCC entities loaded:', data.length)
         }
       })
       .catch(error => {
@@ -40,6 +42,7 @@ export const DXCCStats: React.FC<DXCCStatsProps> = ({ cards }) => {
 
   const stats = React.useMemo(() => {
     const dxccMap = new Map<string, { count: number; name: string; prefix: string }>()
+    const unknown: string[] = []
 
     const findEntity = (callsign: string) => {
       const normalized = callsign.toUpperCase()
@@ -75,9 +78,11 @@ export const DXCCStats: React.FC<DXCCStatsProps> = ({ cards }) => {
         } else {
           dxccMap.set(unknownKey, { count: 1, name: '未识别', prefix: '?' })
         }
+        unknown.push(card.callsign)
       }
     })
 
+    setUnknownCallsigns([...new Set(unknown)])
     return Array.from(dxccMap.entries())
       .sort((a, b) => b[1].count - a[1].count)
   }, [cards, compiledEntities])
@@ -142,6 +147,21 @@ export const DXCCStats: React.FC<DXCCStatsProps> = ({ cards }) => {
         <p className="text-center text-sm text-gray-500 mt-4">
           + {stats.length - 12} 更多国家和地区
         </p>
+      )}
+
+      {unknownCallsigns.length > 0 && (
+        <div className="mt-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+          <p className="text-sm text-yellow-800 mb-2">
+            未识别呼号 ({unknownCallsigns.length}个):
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {unknownCallsigns.map(callsign => (
+              <span key={callsign} className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded">
+                {callsign}
+              </span>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   )
