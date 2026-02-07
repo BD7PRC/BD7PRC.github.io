@@ -1,0 +1,85 @@
+{
+  "title": "BD7PRC的QSL卡展示",
+  "subtitle": "QSL Card Gallery",
+  "search": {
+    "placeholder": "搜索呼号..."
+  },
+  "filter": {
+    "type": "类型筛选",
+    "all": "全部",
+    "6m": "6米波段",
+    "sat": "卫星",
+    "normal": "普通",
+    "letter": "首字母",
+    "view": "视图"
+  },
+  "stats": {
+    "showing": "显示",
+    "total": "张卡片",
+    "lastUpdate": "更新于"
+  },
+  "refresh": "刷新",
+  "proxy": "代理",
+  "selectProxy": "选择图片代理加速",
+  "loading": "加载中...",
+  "noCards": "暂无卡片",
+  "noResults": "未找到匹配结果",
+  "adjustFilter": "尝试调整筛选条件",
+  "footer": {
+    "copyright": "© 2025 BD7PRC. All rights reserved.",
+    "admin": "管理"
+  },
+  "modal": {
+    "front": "正面",
+    "back": "背面",
+    "flip": "切换正反面",
+    "rotate": "旋转图片",
+    "close": "关闭",
+    "keyboard": "使用 ← → 切换图片 · 空格键翻转 · ESC 关闭"
+  },
+  "admin": {
+    "title": "QSL卡片上传管理",
+    "backToDisplay": "返回展示页",
+    "githubConfig": "GitHub 配置",
+    "ocrConfig": "OCR 配置 (SiliconFlow)",
+    "tokenPlaceholder": "GitHub Personal Access Token",
+    "apiKeyPlaceholder": "SiliconFlow API Key",
+    "save": "保存",
+    "clear": "清除",
+    "configured": "已配置",
+    "getApiKey": "前往获取 API Key",
+    "ocrDragHint": "拖放图片自动识别呼号",
+    "ocrDescription": "使用 SiliconFlow AI 自动识别 QSL 卡片中的呼号",
+    "addCard": "添加 QSL 卡片",
+    "addManually": "手动添加",
+    "ocrAuto": "OCR 自动识别",
+    "callsign": "呼号",
+    "type": "类型",
+    "normal": "普通",
+    "front": "正面",
+    "back": "背面",
+    "required": "必填",
+    "optional": "可选",
+    "uploadFront": "点击上传正面",
+    "uploadBack": "点击上传背面",
+    "clearList": "清空列表",
+    "uploadAll": "全部上传",
+    "uploading": "上传中...",
+    "noCardsAdded": "还没有添加 QSL 卡片",
+    "instructions": {
+      "title": "使用说明",
+      "item1": "拖放图片到紫色区域，AI 自动识别呼号并创建卡片",
+      "item2": "也可以点击「手动添加」逐个创建卡片",
+      "item3": "每张 QSL 卡片包含正面（必填）和背面（可选）",
+      "item4": "系统会自动生成文件名",
+      "frontName": "正面: 呼号.jpg / 呼号_6m.jpg / 呼号_SAT.jpg",
+      "backName": "背面: 呼号_B.jpg / 呼号_6m_B.jpg / 呼号_SAT_B.jpg",
+      "item5": "图片保持原图质量，不做压缩"
+    }
+  },
+  "image": {
+    "loading": "图片加载中...",
+    "error": "图片加载失败"
+  },
+  "language": "语言"
+}
