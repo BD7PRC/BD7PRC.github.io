@@ -70,7 +70,7 @@
       "title": "Instructions",
       "item1": "Drop images to the purple area, AI will auto-recognize callsigns and create cards",
       "item2": "Or click 'Add Manually' to create cards one by one",
-      "item3": "Each QSL card includes front (required) and back (optional)",
+      "item3": "Front and back are both optional; upload at least one side per QSL card",
       "item4": "System will auto-generate filenames:",
       "frontName": "Front: callsign.jpg / callsign_6m.jpg / callsign_SAT.jpg",
       "backName": "Back: callsign_B.jpg / callsign_6m_B.jpg / callsign_SAT_B.jpg",
