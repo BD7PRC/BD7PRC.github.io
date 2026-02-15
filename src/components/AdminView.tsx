@@ -367,10 +367,12 @@ export const AdminView: React.FC<AdminViewProps> = ({ onModeChange }) => {
   }
 
   const uploadItem = async (item: QSLUploadItem) => {
-    if (!item.callsign || !item.frontImage) {
+    const hasAtLeastOneImage = Boolean(item.frontImage || item.backImage)
+
+    if (!item.callsign || !hasAtLeastOneImage) {
       updateItem(item.id, {
         status: 'error',
-        error: 'Missing callsign or front image'
+        error: 'Missing callsign or image'
       })
       return
     }
@@ -378,9 +380,11 @@ export const AdminView: React.FC<AdminViewProps> = ({ onModeChange }) => {
     updateItem(item.id, { status: 'uploading', progress: 10 })
 
     try {
-      const frontFileName = generateFileName(item.callsign, item.type, false)
-      const frontBase64 = await fileToBase64(item.frontImage)
-      await uploadToGitHub(frontFileName, frontBase64)
+      if (item.frontImage) {
+        const frontFileName = generateFileName(item.callsign, item.type, false)
+        const frontBase64 = await fileToBase64(item.frontImage)
+        await uploadToGitHub(frontFileName, frontBase64)
+      }
 
       updateItem(item.id, { progress: 50 })
 
@@ -407,7 +411,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onModeChange }) => {
   }
 
   const uploadAll = async () => {
-    const pendingItems = items.filter(i => i.status === 'pending' && i.callsign && i.frontImage)
+    const pendingItems = items.filter(i => i.status === 'pending' && i.callsign && (i.frontImage || i.backImage))
     if (pendingItems.length === 0) {
       toast.error(t('admin.noCardsAdded'))
       return
@@ -661,7 +665,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onModeChange }) => {
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
-                            {t('admin.front')} <span className="text-red-500">*</span>
+                            {t('admin.front')} <span className="text-gray-400">({t('admin.optional')})</span>
                           </label>
                           {item.frontPreview ? (
                             <div className="relative aspect-video rounded-lg overflow-hidden border">
